@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "prsb-site"
+version = "0.1.0"
+description = "website for the Phinney Ridge Steel Band members"
+authors = ["Jim Andress <jim.andress@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+django = "^5.0.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
