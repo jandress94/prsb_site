@@ -9,6 +9,9 @@ from django.urls import path
 
 from . import views
 
+app_name = "band"
 urlpatterns = [
-    path("", views.index, name='index')
+    path("", views.index, name='index'),
+    path("songs/", views.SongListView.as_view(), name="song_list"),
+    path("songs/<int:pk>/", views.SongDetailView.as_view(), name="song_detail")
 ]
