@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "phonenumber_field",
 ]
 
 MIDDLEWARE = [
@@ -79,7 +80,8 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "OPTIONS": {
             "service": "prsb_db_service",
-            "passfile": ".prsb_pgpass",
+            # "passfile": ".prsb_pgpass",
+            "passfile": "/Users/jim/Documents/other.nosync/prsb_site/prsb/.prsb_pgpass"
         },
     }
 }

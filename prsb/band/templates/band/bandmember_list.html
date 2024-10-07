@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Band Members | PRSB</title>
+</head>
+<body>
+    {% block content %}
+        <h2>Band Members</h2>
+        <ul>
+            {% for member in object_list %}
+                <li>
+                    <a href={% url 'band:member_detail' member.user_id %}>
+                        {{ member }}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endblock %}
+</body>
+</html>
