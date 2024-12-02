@@ -1,0 +1,162 @@
+/* General styles */
+body {
+    font-family: 'Montserrat', sans-serif;
+    color: #0D283C; /* Dark Blue for text */
+    background-color: #f5ebd6; /* Cream background */
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Lilita One', cursive;
+    color: #0D283C; /* Dark Blue for headings */
+    margin: 0.5em 0;
+}
+
+a {
+    color: #00AFB5; /* Teal for links */
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Branding motif: vertical stripes on the left edge */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: clamp(50px, 10%, 100px); /* Shrinks with smaller screens */
+    background: linear-gradient(
+        to right,
+        transparent 12.5%,
+        #F8701B 12.5% 25%,
+        transparent 25% 37.5%,
+        #FFB627 37.5% 50%,
+        transparent 50% 62.5%,
+        #00AFB5 62.5% 75%,
+        transparent 75% 87.5%,
+        #805537 87.5% 100%
+    );
+    z-index: -1; /* Ensure it stays behind content */
+}
+
+/* Layout container for page content */
+#content {
+    margin: 0 auto;
+    max-width: 1200px;
+    padding: 20px;
+    margin-left: clamp(60px, 12%, 120px); /* Matches the stripe width + gap */
+}
+
+/* Header, navigation, and footer */
+header {
+    padding: 20px;
+    background-color: #0D283C; /* Dark blue */
+    color: #f5ebd6; /* Cream text */
+    text-align: center;
+}
+
+nav {
+    margin: 10px 0;
+    text-align: center;
+}
+
+nav a {
+    margin: 0 10px;
+    color: #FFB627; /* Yellow links */
+}
+
+footer {
+    text-align: center;
+    padding: 10px;
+    background-color: #805537; /* Brown footer background */
+    color: #f5ebd6; /* Cream text */
+    font-size: 0.9em;
+}
+
+/* Lists */
+ul, ol {
+    margin: 10px 0;
+    padding: 0 20px;
+}
+
+li {
+    margin: 5px 0;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+th, td {
+    border: 1px solid #0D283C; /* Dark Blue for table borders */
+    padding: 10px;
+    text-align: left;
+}
+
+th {
+    background-color: #FFB627; /* Yellow for header rows */
+    color: #0D283C; /* Dark Blue text */
+}
+
+/* Forms */
+form {
+    margin: 20px 0;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input, textarea, select, button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #805537; /* Brown for input borders */
+    border-radius: 5px;
+}
+
+button {
+    background-color: #F8701B; /* Orange button */
+    color: #f5ebd6; /* Cream text */
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #FFB627; /* Yellow hover effect */
+}
+
+/* Media Queries for fine-tuning smaller screens */
+@media (max-width: 768px) {
+    body::before {
+        width: clamp(40px, 8%, 120px); /* Shrink stripes further */
+    }
+
+    #content {
+        margin-left: clamp(50px, 10%, 130px);
+    }
+}
+
+@media (max-width: 480px) {
+    h1 {
+        font-size: 1.5em;
+    }
+
+    table, th, td {
+        font-size: 0.8em;
+    }
+
+    button {
+        padding: 8px;
+    }
+}

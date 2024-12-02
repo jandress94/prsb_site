@@ -1,33 +1,28 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Part Assignments | PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <h2>Part Assignments</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Song</th>
-                    <th>Part</th>
-                    <th>Instrument</th>
-                    <th>Band Member</th>
-                </tr>
-            </thead>
+{% extends "band/base.html" %}
 
-            <tbody>
-                {% for part_assignment in object_list %}
-                    <tr>
-                        <td>{{ part_assignment.song_part.song }}</td>
-                        <td>{{ part_assignment.song_part.name }}</td>
-                        <td>{{ part_assignment.instrument }}</td>
-                        <td>{{ part_assignment.member }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% endblock %}
-</body>
-</html>
+{% block title %}Part Assignments | PRSB{% endblock %}
+
+{% block content %}
+    <h2>Part Assignments</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Song</th>
+                <th>Part</th>
+                <th>Instrument</th>
+                <th>Band Member</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for part_assignment in object_list %}
+                <tr>
+                    <td>{{ part_assignment.song_part.song }}</td>
+                    <td>{{ part_assignment.song_part.name }}</td>
+                    <td>{{ part_assignment.instrument }}</td>
+                    <td>{{ part_assignment.member }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

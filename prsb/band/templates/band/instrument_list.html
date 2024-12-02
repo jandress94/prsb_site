@@ -1,17 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Instruments | PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <h2>Instruments</h2>
-        <ul>
-            {% for instrument in object_list %}
-                <li>{{ instrument.name }} (x{{ instrument.quantity }})</li>
-            {% endfor %}
-        </ul>
-    {% endblock %}
-</body>
-</html>
+{% extends "band/base.html" %}
+
+{% block title %}Instruments | PRSB{% endblock %}
+
+{% block content %}
+    <h2>Instruments</h2>
+    <ul>
+        {% for instrument in object_list %}
+            <li>{{ instrument.name }} (x{{ instrument.quantity }})</li>
+        {% endfor %}
+    </ul>
+{% endblock %}

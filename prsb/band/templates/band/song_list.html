@@ -1,17 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Songs | PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <h2>Songs</h2>
-        <ul>
-            {% for song in object_list %}
-                <li><a href={% url 'band:song_detail' song.id %}>{{ song.title }}</a></li>
-            {% endfor %}
-        </ul>
-    {% endblock %}
-</body>
-</html>
+{% extends "band/base.html" %}
+
+{% block title %}Songs | PRSB{% endblock %}
+
+{% block content %}
+    <h2>Songs</h2>
+    <ul>
+        {% for song in object_list %}
+            <li><a href={% url 'band:song_detail' song.id %}>{{ song.title }}</a></li>
+        {% endfor %}
+    </ul>
+{% endblock %}

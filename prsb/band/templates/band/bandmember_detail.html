@@ -1,69 +1,64 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ bandmember }} | PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <h1>{{ bandmember }}</h1>
+{% extends "band/base.html" %}
 
-        <div>
-            <p>Username: {{ bandmember.user.username }}</p>
-        </div>
+{% block title %}{{ bandmember }} | PRSB{% endblock %}
 
-        <div>
-            <h2>Contact Info</h2>
-            <p>Email: {{ bandmember.user.email }}</p>
-            <p>Phone Number: {{ bandmember.phone_number }}</p>
-        </div>
+{% block content %}
+    <h1>{{ bandmember }}</h1>
 
-        <div>
-            <h2>Emergency Contact</h2>
-            <p>Name: {{ bandmember.emergency_contact_name }}</p>
-            <p>Phone Number: {{ bandmember.emergency_contact_phone }}</p>
-        </div>
+    <div>
+        <p>Username: {{ bandmember.user.username }}</p>
+    </div>
 
-        <div>
-            <h2>Other Information</h2>
-            <p>Bio: {{ bandmember.bio }}</p>
-            <p>Birthday: {{ bandmember.birthday }}</p>
-            <p>Dietary Restrictions: {{ bandmember.dietary_restrictions }}</p>
-            <p>T-Shirt Size: {{ bandmember.tshirt_size }}</p>
-        </div>
+    <div>
+        <h2>Contact Info</h2>
+        <p>Email: {{ bandmember.user.email }}</p>
+        <p>Phone Number: {{ bandmember.phone_number }}</p>
+    </div>
 
-        <div>
-            <h2>Part Assignments</h2>
+    <div>
+        <h2>Emergency Contact</h2>
+        <p>Name: {{ bandmember.emergency_contact_name }}</p>
+        <p>Phone Number: {{ bandmember.emergency_contact_phone }}</p>
+    </div>
 
-            <table>
-                <thead>
+    <div>
+        <h2>Other Information</h2>
+        <p>Bio: {{ bandmember.bio }}</p>
+        <p>Birthday: {{ bandmember.birthday }}</p>
+        <p>Dietary Restrictions: {{ bandmember.dietary_restrictions }}</p>
+        <p>T-Shirt Size: {{ bandmember.tshirt_size }}</p>
+    </div>
+
+    <div>
+        <h2>Part Assignments</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Song</th>
+                    <th>Part</th>
+                    <th>Instrument</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for part_assignment in part_assignments %}
                     <tr>
-                        <th>Song</th>
-                        <th>Part</th>
-                        <th>Instrument</th>
+                        <td>{{ part_assignment.song_part.song }}</td>
+                        <td>{{ part_assignment.song_part.name }}</td>
+                        <td>{{ part_assignment.instrument }}</td>
                     </tr>
-                </thead>
-
-                <tbody>
-                    {% for part_assignment in part_assignments %}
-                        <tr>
-                            <td>{{ part_assignment.song_part.song }}</td>
-                            <td>{{ part_assignment.song_part.name }}</td>
-                            <td>{{ part_assignment.instrument }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <div>
-            <h2>Upcoming Gigs</h2>
-            <ul>
-                {% for attendance in upcoming_gig_attendance %}
-                    <li>{{ attendance.gig }}: {{ attendance.status }}</li>
                 {% endfor %}
-            </ul>
-        </div>
-    {% endblock %}
-</body>
-</html>
+            </tbody>
+        </table>
+    </div>
+
+    <div>
+        <h2>Upcoming Gigs</h2>
+        <ul>
+            {% for attendance in upcoming_gig_attendance %}
+                <li>{{ attendance.gig }}: {{ attendance.status }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endblock %}

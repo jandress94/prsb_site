@@ -1,50 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ song.title }} | PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <h1>{{song.title}}</h1>
+{% extends "band/base.html" %}
 
-        <div>
-            <p>Composer: {{ song.composer }}</p>
-            <p>Duration: {{ song.duration }}</p>
-            <p>Form: {{ song.form }}</p>
-        </div>
+{% block title %}{{ song.title }} | PRSB{% endblock %}
 
-        <div>
-            <h2>Parts</h2>
-            <ul>
-                {% for part in song.parts.all %}
-                    <li>{{ part.name }}</li>
-                {% endfor %}
-            </ul>
-        </div>
+{% block content %}
+    <h1>{{song.title}}</h1>
 
-        <div>
-            <h2>Part Assignments</h2>
-            <table>
-                <thead>
+    <div>
+        <p>Composer: {{ song.composer }}</p>
+        <p>Duration: {{ song.duration }}</p>
+        <p>Form: {{ song.form }}</p>
+    </div>
+
+    <div>
+        <h2>Parts</h2>
+        <ul>
+            {% for part in song.parts.all %}
+                <li>{{ part.name }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div>
+        <h2>Part Assignments</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Part</th>
+                    <th>Instrument</th>
+                    <th>Band Member</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for part_assignment in part_assignments %}
                     <tr>
-                        <th>Part</th>
-                        <th>Instrument</th>
-                        <th>Band Member</th>
+                        <td>{{ part_assignment.song_part.name }}</td>
+                        <td>{{ part_assignment.instrument }}</td>
+                        <td>{{ part_assignment.member.user.get_full_name }}</td>
                     </tr>
-                </thead>
-
-                <tbody>
-                    {% for part_assignment in part_assignments %}
-                        <tr>
-                            <td>{{ part_assignment.song_part.name }}</td>
-                            <td>{{ part_assignment.instrument }}</td>
-                            <td>{{ part_assignment.member.user.get_full_name }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% endblock %}
-</body>
-</html>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

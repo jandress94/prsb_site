@@ -1,64 +1,59 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ gig.name }} | PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <h1>{{gig.name}}</h1>
+{% extends "band/base.html" %}
 
-        <h2>Band Member Availability</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Available</th>
-                    <th>Maybe Available</th>
-                    <th>Not Available</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>
-                        {% for attendance in available_members %}
-                            {{ attendance.member }}
-                            <br/>
-                        {% endfor %}
-                    </td>
-                    <td>
-                        {% for attendance in maybe_available_members %}
-                            {{ attendance.member }}
-                            <br/>
-                        {% endfor %}
-                    </td>
-                    <td>
-                        {% for attendance in unavailable_members %}
-                            {{ attendance.member }}
-                            <br/>
-                        {% endfor %}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+{% block title %}{{ gig.name }} | PRSB{% endblock %}
 
-        <h2>Instruments</h2>
-        <ul>
-            {% for gig_instrument in gig.giginstrument_set.all %}
-                <li>{{ gig_instrument.instrument }} ({{ gig_instrument.gig_quantity }})</li>
-            {% endfor %}
-        </ul>
+{% block content %}
+    <h1>{{gig.name}}</h1>
 
-        <h2>Song Recommendations</h2>
-        {% for gpa in gig_part_assignments %}
-            <details>
-                <summary>{{ gpa.song.title }} ({{ gpa.score|floatformat:2 }})</summary>
-                <ul>
-                    {% for part_assignment in gpa.part_assignments %}
-                        <li>{{ part_assignment }}</li>
+    <h2>Band Member Availability</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Available</th>
+                <th>Maybe Available</th>
+                <th>Not Available</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    {% for attendance in available_members %}
+                        {{ attendance.member }}
+                        <br/>
                     {% endfor %}
-                </ul>
-            </details>
+                </td>
+                <td>
+                    {% for attendance in maybe_available_members %}
+                        {{ attendance.member }}
+                        <br/>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for attendance in unavailable_members %}
+                        {{ attendance.member }}
+                        <br/>
+                    {% endfor %}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Instruments</h2>
+    <ul>
+        {% for gig_instrument in gig.giginstrument_set.all %}
+            <li>{{ gig_instrument.instrument }} ({{ gig_instrument.gig_quantity }})</li>
         {% endfor %}
-    {% endblock %}
-</body>
-</html>
+    </ul>
+
+    <h2>Song Recommendations</h2>
+    {% for gpa in gig_part_assignments %}
+        <details>
+            <summary>{{ gpa.song.title }} ({{ gpa.score|floatformat:2 }})</summary>
+            <ul>
+                {% for part_assignment in gpa.part_assignments %}
+                    <li>{{ part_assignment }}</li>
+                {% endfor %}
+            </ul>
+        </details>
+    {% endfor %}
+{% endblock %}

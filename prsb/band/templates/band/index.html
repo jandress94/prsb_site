@@ -1,20 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>PRSB</title>
-</head>
-<body>
-    {% block content %}
-        <a href={% url 'band:member_list' %}>Members</a>
-        <br />
-        <a href={% url 'band:song_list' %}>Songs</a>
-        <br />
-{#        <a href={% url 'band:part_assignment_list' %}>Part Assignments</a>#}
-{#        <br />#}
-        <a href={% url 'band:gig_list' %}>Gigs</a>
-        <br />
-        <a href={% url 'band:instrument_list' %}>Instruments</a>
-    {% endblock %}
-</body>
-</html>
+{% extends "band/base.html" %}
+
+{% block title %}PRSB{% endblock %}
+
+{% block content %}
+    <a href={% url 'band:member_list' %}>Members</a>
+    <br />
+    <a href={% url 'band:song_list' %}>Songs</a>
+    <br />
+{#    <a href={% url 'band:part_assignment_list' %}>Part Assignments</a>#}
+    <br />
+    <a href={% url 'band:gig_list' %}>Gigs</a>
+    <br />
+    <a href={% url 'band:instrument_list' %}>Instruments</a>
+{% endblock %}
