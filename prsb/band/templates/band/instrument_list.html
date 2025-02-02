@@ -9,4 +9,6 @@
             <li>{{ instrument.name }} (x{{ instrument.quantity }})</li>
         {% endfor %}
     </ul>
+
+    <a href={% url 'band:index' %}>Back to Main Menu</a>
 {% endblock %}

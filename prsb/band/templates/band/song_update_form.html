@@ -1,10 +1,11 @@
 {% extends "band/base.html" %}
 
-{% block title %}TODO | PRSB{% endblock %}
+{% block title %}{{ song.title }} | Update | PRSB{% endblock %}
 
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
         <input type="submit" value="Update">
     </form>
+    <a href={% url 'band:song_detail' song.id %}>Cancel</a>
 {% endblock %}

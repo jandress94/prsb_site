@@ -62,15 +62,19 @@ class SongDetailView(generic.DetailView):
         return context
 
 
-class SongPartForm(forms.ModelForm):
-    class Meta:
-        model = SongPart
-        fields = ['name']
-
-
 class SongUpdateView(generic.UpdateView):
     model = Song
     template_name_suffix = '_update_form'
+    fields = ['title',
+              'composer',
+              'duration',
+              'in_gig_rotation',
+              'form']
+
+
+class SongCreateView(generic.CreateView):
+    model = Song
+    template_name_suffix = '_create_form'
     fields = ['title',
               'composer',
               'duration',

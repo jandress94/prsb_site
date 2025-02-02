@@ -5,6 +5,8 @@
 {% block content %}
     <h1>{{song.title}}</h1>
 
+    <a href={% url 'band:song_update' song.id %}>Edit Song Information</a>
+
     <div>
         <p>Composer: {{ song.composer }}</p>
         <p>Duration: {{ song.duration }}</p>
@@ -42,4 +44,6 @@
             </tbody>
         </table>
     </div>
+
+    <a href={% url 'band:song_list' %}>Back to Songs</a>
 {% endblock %}

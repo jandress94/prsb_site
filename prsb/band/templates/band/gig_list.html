@@ -9,4 +9,6 @@
             <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a></li>
         {% endfor %}
     </ul>
+
+    <a href={% url 'band:index' %}>Back to Main Menu</a>
 {% endblock %}
