@@ -12,7 +12,6 @@ class SongPartInline(admin.TabularInline):
 class SongAdmin(admin.ModelAdmin):
     inlines = [SongPartInline]
     list_display = ["title", "in_gig_rotation"]
-
 admin.site.register(Song, SongAdmin)
 
 
@@ -27,8 +26,8 @@ def band_member_active(obj):
 
 class BandMemberAdmin(admin.ModelAdmin):
     list_display = [band_member_name, band_member_active]
-
 admin.site.register(BandMember, BandMemberAdmin)
+
 
 admin.site.register(Instrument)
 
@@ -36,11 +35,17 @@ admin.site.register(Instrument)
 class PartAssignmentAdmin(admin.ModelAdmin):
     list_display = ['member', 'song_part__song', 'song_part', 'instrument']
     list_filter = ['member', 'song_part__song', 'song_part', 'instrument']
-
 admin.site.register(PartAssignment, PartAssignmentAdmin)
 
+
 admin.site.register(Gig)
-admin.site.register(GigInstrument)
+
+
+class GigInstrumentAdmin(admin.ModelAdmin):
+    list_display = ["gig", "instrument"]
+    list_filter = ["gig"]
+admin.site.register(GigInstrument, GigInstrumentAdmin)
+
 
 class GigAttendanceAdmin(admin.ModelAdmin):
     list_display = ['gig', 'member', 'status']
