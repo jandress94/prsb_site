@@ -1,9 +1,10 @@
+from django.db.models import Exists, OuterRef
 from django.forms import forms
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.views import generic
 
-from scripts.get_song_part_availability import get_gig_part_assignments
+from scripts.gig_part_assignment import get_gig_part_assignments
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart
 
 
@@ -103,7 +104,13 @@ class GigDetailView(generic.DetailView):
         context["gig_part_assignments"] = get_gig_part_assignments(context['object'])
 
         for availability in GigAttendance.AVAILABILITY_CHOICES:
-            context[f"{availability}_members"] = context['object'].gigattendance_set.filter(status=availability)
+            members = context['object'].gigattendance_set.filter(status=availability)
+            context[f"{availability}_members"] = sorted(members, key=lambda ga: ga.member.user.get_full_name())
+
+        context["missing_members"] = BandMember.objects.filter(
+            ~Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig=context['object'])),
+            user__is_active=True
+        ).order_by('user__first_name', 'user__last_name')
 
         return context
 

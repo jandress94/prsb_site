@@ -31,7 +31,18 @@ class BandMemberAdmin(admin.ModelAdmin):
 admin.site.register(BandMember, BandMemberAdmin)
 
 admin.site.register(Instrument)
-admin.site.register(PartAssignment)
+
+
+class PartAssignmentAdmin(admin.ModelAdmin):
+    list_display = ['member', 'song_part__song', 'song_part', 'instrument']
+    list_filter = ['member', 'song_part__song', 'song_part', 'instrument']
+
+admin.site.register(PartAssignment, PartAssignmentAdmin)
+
 admin.site.register(Gig)
 admin.site.register(GigInstrument)
-admin.site.register(GigAttendance)
+
+class GigAttendanceAdmin(admin.ModelAdmin):
+    list_display = ['gig', 'member', 'status']
+    list_filter = ['gig', 'member', 'status']
+admin.site.register(GigAttendance, GigAttendanceAdmin)

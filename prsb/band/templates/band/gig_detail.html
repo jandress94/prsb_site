@@ -12,6 +12,7 @@
                 <th>Available</th>
                 <th>Maybe Available</th>
                 <th>Not Available</th>
+                <th>Missing Availability</th>
             </tr>
         </thead>
         <tbody>
@@ -31,6 +32,12 @@
                 <td>
                     {% for attendance in unavailable_members %}
                         {{ attendance.member }}
+                        <br/>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for member in missing_members %}
+                        {{ member }}
                         <br/>
                     {% endfor %}
                 </td>

@@ -13,6 +13,9 @@ class Song(models.Model):
     in_gig_rotation = models.BooleanField(default=False)
     form = models.CharField(max_length=256, blank=True)
 
+    class Meta:
+        ordering = ["title"]
+
     def get_absolute_url(self):
         return reverse("band:song_detail", kwargs={"pk": self.pk})
 
@@ -44,6 +47,9 @@ class BandMember(models.Model):
     dietary_restrictions = models.TextField(blank=True)
     tshirt_size = models.CharField(max_length=256, blank=True)
 
+    class Meta:
+        ordering = ["user__first_name", "user__last_name"]
+
     def __str__(self):
         return self.user.get_full_name()
 
@@ -68,6 +74,11 @@ class PartAssignment(models.Model):
     song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
     instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['member', 'song_part', 'instrument'], name='unique PartAssignment')
+        ]
+
     def __str__(self):
         return f'{self.member} plays {self.instrument} on {self.song_part}'
 
@@ -83,6 +94,11 @@ class GigInstrument(models.Model):
     gig = models.ForeignKey(Gig, on_delete=models.CASCADE)
     instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE)
     gig_quantity = models.PositiveSmallIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['gig', 'instrument'], name='unique GigInstrument')
+        ]
 
     def __str__(self):
         return f'{self.gig}: {self.instrument}'
@@ -100,6 +116,11 @@ class GigAttendance(models.Model):
     gig = models.ForeignKey(Gig, on_delete=models.CASCADE)
     member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     status = models.CharField(max_length=256, choices=AVAILABILITY_CHOICES)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['gig', 'member'], name='unique GigAttendance')
+        ]
 
     def __str__(self):
         return f'{self.gig}: {self.member} ({self.status})'
