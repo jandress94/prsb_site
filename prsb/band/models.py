@@ -33,6 +33,9 @@ class SongPart(models.Model):
     def __str__(self):
         return f'{self.song.title}: {self.name}'
 
+    def get_order(self) -> int:
+        return self._order
+
 
 class BandMember(models.Model):
     user = models.OneToOneField(User, primary_key=True, on_delete=models.CASCADE)

@@ -56,11 +56,53 @@
     {% for gpa in gig_part_assignments %}
         <details>
             <summary>{{ gpa.song.title }} ({{ gpa.score|floatformat:2 }})</summary>
-            <ul>
-                {% for part_assignment in gpa.part_assignments %}
-                    <li>{{ part_assignment }}</li>
-                {% endfor %}
-            </ul>
+
+            <table class="sortable">
+                <thead>
+                    <tr>
+                        <th>Band Member</th>
+                        <th>Part</th>
+                        <th>Instrument</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# the people playing parts #}
+                    {% for part_assignment in gpa.part_assignments %}
+                        <tr>
+                            <td>{{ part_assignment.member }}</td>
+                            <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
+                            <td>{{ part_assignment.instrument }}</td>
+                        </tr>
+                    {% endfor %}
+
+                    {# the members not playing #}
+                    {% for member in gpa.non_players %}
+                        <tr class="warning">
+                            <td>{{ member }}</td>
+                            <td sorttable_customkey=100></td>
+                            <td></td>
+                        </tr>
+                    {% endfor %}
+
+                    {# the song parts not being played #}
+                    {% for song_part in gpa.unplayed_parts %}
+                        <tr class="warning">
+                            <td></td>
+                            <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
+                            <td></td>
+                        </tr>
+                    {% endfor %}
+
+                    {# the instruments not being played #}
+                    {% for instrument, cnt in gpa.unplayed_instruments.items %}
+                        <tr class="warning">
+                            <td></td>
+                            <td sorttable_customkey=100></td>
+                            <td>{{ instrument }} ({{ cnt }})</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </details>
     {% endfor %}
 

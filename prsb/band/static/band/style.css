@@ -107,6 +107,10 @@ th {
     color: #0D283C; /* Dark Blue text */
 }
 
+tr.warning {
+    background-color: #F6D7C5;
+}
+
 /* Forms */
 form {
     margin: 20px 0;

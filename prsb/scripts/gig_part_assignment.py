@@ -1,6 +1,7 @@
 import itertools
 from datetime import datetime
-from typing import Tuple, NamedTuple
+from itertools import groupby
+from typing import Tuple
 
 import django
 import numpy as np
@@ -9,7 +10,7 @@ from scipy.optimize import LinearConstraint
 from collections import Counter
 
 django.setup()
-from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument
+from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember
 
 
 class ScoringConfig:
@@ -19,13 +20,29 @@ class ScoringConfig:
     ASSIGNMENT_WEIGHT_RANDOM = 0.000001
 
 
-class GigPartAssignment(NamedTuple):
+class GigPartAssignment:
     song: Song
     part_assignments: list[PartAssignment]
     score: float
 
+    def __init__(self, song: Song, part_assignments: list[PartAssignment], score: float,
+                 attendees: list[BandMember], gig_instruments: list[GigInstrument]):
+        self.song = song
+        self.score = score
+        self.part_assignments = part_assignments
 
-def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment], gig_instruments: list[GigInstrument], member_song_counts: Counter) -> Tuple[list[PartAssignment, float]]:
+        playing_attendees = {pa.member for pa in part_assignments}
+        self.non_players = [a for a in attendees if a not in playing_attendees]
+
+        covered_parts = {pa.song_part for pa in part_assignments}
+        self.unplayed_parts = {sp for sp in song.parts.all() if sp not in covered_parts}
+
+        played_instruments = Counter(pa.instrument for pa in part_assignments)
+        remaining_instrument_counts = {gi.instrument: gi.gig_quantity - played_instruments[gi.instrument] for gi in gig_instruments}
+        self.unplayed_instruments = {i: c for i, c in remaining_instrument_counts.items() if c != 0}
+
+
+def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment], gig_instruments: list[GigInstrument], member_song_counts: Counter) -> Tuple[list[PartAssignment], float]:
     members = {}
     instruments = {}
     parts = {}
@@ -139,22 +156,25 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
 
 def get_gig_part_assignments(gig: Gig):
     t0 = datetime.now()
+    attendees = BandMember.objects.filter(gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE)
     gig_instruments: list[GigInstrument] = list(GigInstrument.objects.filter(gig=gig))
 
     gig_part_assignments = []
     member_song_counts = Counter()
-    for song in Song.objects.filter(in_gig_rotation=True):
-        part_list = list(song.parts.all())
-        if len(part_list) == 0:
-            continue
 
-        attendee_part_assignments = PartAssignment.objects.filter(member__gigattendance__gig=gig,
-                                                                  member__gigattendance__status=GigAttendance.AVAILABLE,
-                                                                  instrument__giginstrument__in=gig_instruments,
-                                                                  song_part__song=song)
+    all_part_assignments = PartAssignment.objects.filter(member__gigattendance__gig=gig,
+                                                         member__gigattendance__status=GigAttendance.AVAILABLE,
+                                                         instrument__giginstrument__in=gig_instruments,
+                                                         song_part__song__in_gig_rotation=True
+                                                         ).order_by("song_part__song")
+
+    song_to_part_assignments = {s: list(p) for s, p in groupby(all_part_assignments, lambda pa: pa.song_part.song)}
+
+    for song, attendee_part_assignments in sorted(song_to_part_assignments.items(), key=lambda s_apa: len(s_apa[1])):
+        part_list = list(song.parts.all())
 
         part_assignments, score = get_gig_song_part_assignments(part_list, list(attendee_part_assignments), gig_instruments, member_song_counts)
-        gig_part_assignments.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score))
+        gig_part_assignments.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
 
         member_song_counts.update([pa.member for pa in part_assignments])
 
