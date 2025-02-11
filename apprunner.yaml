@@ -1,0 +1,35 @@
+version: 1.0
+runtime: python311
+build:
+  commands:
+    build:
+      - pip3 install pipx
+      - pipx install poetry
+      - poetry install
+#    post-build:
+#      - python3 manage.py test
+#  env:
+#    - name: DJANGO_SETTINGS_MODULE
+#      value: "django_apprunner.settings"
+#    - name: MY_VAR_EXAMPLE
+#      value: "example"
+run:
+  runtime-version: 3.11
+#  pre-run:
+#    - pip3 install pipenv
+#    - pipenv install
+#    - python3 manage.py migrate
+  command: poetry run pip freeze
+#  network:
+#    port: 8000
+#    env: MY_APP_PORT
+#  env:
+#    - name: MY_VAR_EXAMPLE
+#      value: "example"
+#  secrets:
+#    - name: my-secret
+#      value-from: "arn:aws:secretsmanager:us-east-1:123456789012:secret:testingstackAppRunnerConstr-kJFXde2ULKbT-S7t8xR:username::"
+#    - name: my-parameter
+#      value-from: "arn:aws:ssm:us-east-1:123456789012:parameter/parameter-name"
+#    - name: my-parameter-only-name
+#      value-from: "parameter-name"
