@@ -10,7 +10,8 @@ from scipy.optimize import LinearConstraint
 from collections import Counter
 
 django.setup()
-from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember
+from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
+    PerformanceReadiness
 
 
 class ScoringConfig:
@@ -165,8 +166,9 @@ def get_gig_part_assignments(gig: Gig):
     all_part_assignments = PartAssignment.objects.filter(member__gigattendance__gig=gig,
                                                          member__gigattendance__status=GigAttendance.AVAILABLE,
                                                          instrument__giginstrument__in=gig_instruments,
-                                                         song_part__song__in_gig_rotation=True
-                                                         ).order_by("song_part__song")
+                                                         song_part__song__in_gig_rotation=True) \
+        .exclude(performance_readiness=PerformanceReadiness.NOT_READY) \
+        .order_by("song_part__song")
 
     song_to_part_assignments = {s: list(p) for s, p in groupby(all_part_assignments, lambda pa: pa.song_part.song)}
 

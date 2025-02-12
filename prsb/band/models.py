@@ -72,10 +72,24 @@ class Instrument(models.Model):
         return self.name
 
 
+class PerformanceReadiness:
+    READY = "ready"
+    BACKUP = "backup"
+    NOT_READY = "not_ready"
+    CHOICES = {
+        READY: "Ready to Perform",
+        BACKUP: "Can Perform as Backup",
+        NOT_READY: "Not Ready to Perform"
+    }
+
+
 class PartAssignment(models.Model):
     member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
     instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE)
+    performance_readiness = models.CharField(max_length=256,
+                                             choices=PerformanceReadiness.CHOICES,
+                                             default=PerformanceReadiness.READY)
 
     class Meta:
         constraints = [
