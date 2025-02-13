@@ -82,6 +82,10 @@ class PerformanceReadiness:
         BACKUP: "Can Perform as Backup",
         NOT_READY: "Not Ready to Perform"
     }
+    CHOICES_OVERRIDES = {
+        READY: "Ready to Perform",
+        BACKUP: "Can Perform as Backup"
+    }
 
 
 class PartAssignment(models.Model):
@@ -153,6 +157,9 @@ class GigPartAssignmentOverride(models.Model):
     member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
     gig_instrument = models.ForeignKey(GigInstrument, on_delete=models.CASCADE)
+    performance_readiness = models.CharField(max_length=256,
+                                             choices=PerformanceReadiness.CHOICES_OVERRIDES,
+                                             default=PerformanceReadiness.READY)
 
     def __str__(self):
         return f'{self.member} plays {self.gig_instrument.instrument} on {self.song_part} at {self.gig_instrument.gig}'

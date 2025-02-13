@@ -58,14 +58,16 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     for i, assignment in enumerate(all_assignments):
         members.setdefault(assignment.member, []).append(i)
         instruments.setdefault(assignment.instrument, []).append(i)
-        parts.setdefault(assignment.song_part, []).append(i)
+        if assignment.performance_readiness == PerformanceReadiness.READY:
+            parts.setdefault(assignment.song_part, []).append(i)
     num_assignments = len(all_assignments)
     num_vars += num_assignments
 
     for i, override in enumerate(part_assignment_overrides, start=num_vars):
         members.setdefault(override.member, []).append(i)
         instruments.setdefault(override.gig_instrument.instrument, []).append(i)
-        parts.setdefault(override.song_part, []).append(i)
+        if override.performance_readiness == PerformanceReadiness.READY:
+            parts.setdefault(override.song_part, []).append(i)
     num_overrides = len(part_assignment_overrides)
     num_vars += num_overrides
 
@@ -113,7 +115,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
         ub_instrument[i] = instrument_to_count_map[instrument]
     constraints.append(LinearConstraint(coeff_instrument, lb_instrument, ub_instrument))
 
-    # ensure each part is played by at least one person, or that there's a penalty applied
+    # ensure each part is played by at least one (primary / ready) person, or that there's a penalty applied
     coeff_part = np.zeros((num_parts, num_vars))
     lb_part = np.ones(num_parts)
     ub_part = np.inf * np.ones(num_parts)
@@ -175,7 +177,12 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     ##########################################################################################
     # Process Results
     ##########################################################################################
-    gig_part_assignments = list(itertools.compress(all_assignments + [PartAssignment(member=pao.member, song_part=pao.song_part, instrument=pao.gig_instrument.instrument) for pao in part_assignment_overrides], result.x))
+    overrides_as_part_assignments = [PartAssignment(member=pao.member,
+                                                    song_part=pao.song_part,
+                                                    instrument=pao.gig_instrument.instrument,
+                                                    performance_readiness=pao.performance_readiness)
+                                     for pao in part_assignment_overrides]
+    gig_part_assignments = list(itertools.compress(all_assignments + overrides_as_part_assignments, result.x))
     gig_part_assignments = sorted(gig_part_assignments, key=lambda gpa: (gpa.song_part._order, gpa.member.user.get_full_name()))
 
     score = sum(itertools.compress(c_instrument + c_missing_part_penalty, result.x))
