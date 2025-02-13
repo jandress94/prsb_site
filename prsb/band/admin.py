@@ -2,7 +2,8 @@ from django.contrib import admin
 from django.db.models import Value
 from django.db.models.functions import Concat
 
-from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument
+from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument, \
+    GigPartAssignmentOverride
 
 
 class SongPartInline(admin.TabularInline):
@@ -34,7 +35,7 @@ admin.site.register(Instrument)
 
 class PartAssignmentAdmin(admin.ModelAdmin):
     list_display = ['member', 'song_part__song', 'song_part', 'instrument']
-    list_filter = ['member', 'song_part__song', 'song_part', 'instrument']
+    list_filter = ['member', 'song_part__song', 'song_part', 'instrument']  # TODO: filtering by member doesn't work
 admin.site.register(PartAssignment, PartAssignmentAdmin)
 
 
@@ -51,3 +52,6 @@ class GigAttendanceAdmin(admin.ModelAdmin):
     list_display = ['gig', 'member', 'status']
     list_filter = ['gig', 'member', 'status']
 admin.site.register(GigAttendance, GigAttendanceAdmin)
+
+
+admin.site.register(GigPartAssignmentOverride)

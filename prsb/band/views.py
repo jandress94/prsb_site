@@ -5,7 +5,8 @@ from django.shortcuts import render
 from django.views import generic
 
 from scripts.gig_part_assignment import get_gig_part_assignments
-from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart
+from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
+    GigPartAssignmentOverride
 
 
 def index(request):
@@ -101,14 +102,18 @@ class GigDetailView(generic.DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["gig_part_assignments"] = get_gig_part_assignments(context['object'])
+        gig = context['object']
+
+        context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
+
+        context["gig_part_assignments"] = get_gig_part_assignments(gig, context['part_assignment_overrides'])
 
         for availability in GigAttendance.AVAILABILITY_CHOICES:
-            members = context['object'].gigattendance_set.filter(status=availability)
+            members = gig.gigattendance_set.filter(status=availability)
             context[f"{availability}_members"] = sorted(members, key=lambda ga: ga.member.user.get_full_name())
 
         context["missing_members"] = BandMember.objects.filter(
-            ~Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig=context['object'])),
+            ~Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig=gig)),
             user__is_active=True
         ).order_by('user__first_name', 'user__last_name')
 

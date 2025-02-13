@@ -52,6 +52,30 @@
         {% endfor %}
     </ul>
 
+    {% if part_assignment_overrides %}
+        <h2>Part Assignment Overrides</h2>
+        <table class="sortable">
+            <thead>
+                <tr>
+                    <th>Song</th>
+                    <th>Band Member</th>
+                    <th>Part</th>
+                    <th>Instrument</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pao in part_assignment_overrides %}
+                    <tr>
+                        <td>{{ pao.song_part.song }}</td>
+                        <td>{{ pao.member }}</td>
+                        <td>{{ pao.song_part }}</td>
+                        <td>{{ pao.gig_instrument.instrument }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
     <h2>Song Recommendations</h2>
     {% for gpa in gig_part_assignments %}
         <details>

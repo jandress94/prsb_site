@@ -5,13 +5,14 @@ from typing import Tuple
 
 import django
 import numpy as np
+from django.db.models import Exists, OuterRef
 from scipy import optimize
 from scipy.optimize import LinearConstraint
 from collections import Counter
 
 django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
-    PerformanceReadiness
+    PerformanceReadiness, GigPartAssignmentOverride
 
 
 class ScoringConfig:
@@ -43,27 +44,40 @@ class GigPartAssignment:
         self.unplayed_instruments = {i: c for i, c in remaining_instrument_counts.items() if c != 0}
 
 
-def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment], gig_instruments: list[GigInstrument], member_song_counts: Counter) -> Tuple[list[PartAssignment], float]:
+def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment],
+                                  gig_instruments: list[GigInstrument], member_song_counts: Counter,
+                                  part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[PartAssignment] | None, float]:
     members = {}
     instruments = {}
     parts = {}
 
     instrument_to_count_map = {gi.instrument: gi.gig_quantity for gi in gig_instruments}
 
+    num_vars = 0
+
     for i, assignment in enumerate(all_assignments):
         members.setdefault(assignment.member, []).append(i)
         instruments.setdefault(assignment.instrument, []).append(i)
         parts.setdefault(assignment.song_part, []).append(i)
+    num_assignments = len(all_assignments)
+    num_vars += num_assignments
 
-    num_parts = len(part_list)
+    for i, override in enumerate(part_assignment_overrides, start=num_vars):
+        members.setdefault(override.member, []).append(i)
+        instruments.setdefault(override.gig_instrument.instrument, []).append(i)
+        parts.setdefault(override.song_part, []).append(i)
+    num_overrides = len(part_assignment_overrides)
+    num_vars += num_overrides
+
     num_members = len(members)
     num_instruments = len(instruments)
-    num_assignments = len(all_assignments)
-    num_vars = num_assignments + num_parts  # one var per assignment with an extra var to represent missing a part
+
+    num_parts = len(part_list)
+    num_vars += num_parts
 
     ##########################################################################################
     # Constraints
-    # There are three types of constraints
+    # There are four types of constraints
     #   1. Member (each person can play only one part)
     #       - all the variables associated with a given member have a coefficient of 1
     #       - lower bound 0 (they might play nothing)
@@ -76,6 +90,9 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     #       - all the variables associated with a given song part have a coefficient of 1, as does one part indicator variable
     #       - lower bound 1 (either at least one member plays a song part, or the indicator flips on)
     #       - upper bound infinite (an unlimited number of members can play the part)
+    #   4. Overrides (guarantee someone has a particular part)
+    #       - the variable for an override has coefficient 1
+    #       - lower and upper bound are both 1
     ##########################################################################################
     constraints = []
 
@@ -103,8 +120,17 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     for i, part in enumerate(part_list):
         part_indices = parts.get(part, [])
         coeff_part[i, part_indices] = 1
-        coeff_part[i, num_assignments + i] = 1
+        coeff_part[i, num_assignments + num_overrides + i] = 1
     constraints.append(LinearConstraint(coeff_part, lb_part, ub_part))
+
+    # ensure overrides are respected
+    if num_overrides > 0:
+        coeff_overrides = np.zeros((num_overrides, num_vars))
+        lb_overrides = np.ones(num_overrides)
+        ub_overrides = np.ones(num_overrides)
+        for i in range(num_overrides):
+            coeff_overrides[i, num_assignments + i] = 1
+        constraints.append(LinearConstraint(coeff_overrides, lb_overrides, ub_overrides))
 
     ##########################################################################################
     # Objective Function Coefficients
@@ -127,7 +153,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
         c_per_song_penalty[member_indices] += ScoringConfig.ASSIGNMENT_PENALTY_PER_SONG * member_song_counts[member]**2
 
     c_missing_part_penalty = np.zeros(num_vars)
-    c_missing_part_penalty[num_assignments:] = ScoringConfig.SCORE_RANGE / num_parts / 2
+    c_missing_part_penalty[-num_parts:] = ScoringConfig.SCORE_RANGE / num_parts / 2
 
     c = c_instrument + c_random + c_per_song_penalty + c_missing_part_penalty
 
@@ -143,10 +169,13 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     ##########################################################################################
     result = optimize.milp(c=c, constraints=constraints, bounds=bounds, integrality=integrality)
 
+    if not result.success:
+        return None, -1
+
     ##########################################################################################
     # Process Results
     ##########################################################################################
-    gig_part_assignments = list(itertools.compress(all_assignments, result.x))
+    gig_part_assignments = list(itertools.compress(all_assignments + [PartAssignment(member=pao.member, song_part=pao.song_part, instrument=pao.gig_instrument.instrument) for pao in part_assignment_overrides], result.x))
     gig_part_assignments = sorted(gig_part_assignments, key=lambda gpa: (gpa.song_part._order, gpa.member.user.get_full_name()))
 
     score = sum(itertools.compress(c_instrument + c_missing_part_penalty, result.x))
@@ -155,7 +184,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     return gig_part_assignments, score
 
 
-def get_gig_part_assignments(gig: Gig):
+def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]):
     t0 = datetime.now()
     attendees = BandMember.objects.filter(gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE)
     gig_instruments: list[GigInstrument] = list(GigInstrument.objects.filter(gig=gig))
@@ -163,7 +192,10 @@ def get_gig_part_assignments(gig: Gig):
     gig_part_assignments = []
     member_song_counts = Counter()
 
-    all_part_assignments = PartAssignment.objects.filter(member__gigattendance__gig=gig,
+    all_part_assignments = PartAssignment.objects.filter(~Exists(GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig,
+                                                                                                          song_part__song=OuterRef("song_part__song"),
+                                                                                                          member=OuterRef("member"))),
+                                                         member__gigattendance__gig=gig,
                                                          member__gigattendance__status=GigAttendance.AVAILABLE,
                                                          instrument__giginstrument__in=gig_instruments,
                                                          song_part__song__in_gig_rotation=True) \
@@ -171,11 +203,16 @@ def get_gig_part_assignments(gig: Gig):
         .order_by("song_part__song")
 
     song_to_part_assignments = {s: list(p) for s, p in groupby(all_part_assignments, lambda pa: pa.song_part.song)}
+    song_to_overrides = {s: list(o) for s, o in groupby(part_assignment_overrides, lambda pao: pao.song_part.song)}
 
     for song, attendee_part_assignments in sorted(song_to_part_assignments.items(), key=lambda s_apa: len(s_apa[1])):
         part_list = list(song.parts.all())
 
-        part_assignments, score = get_gig_song_part_assignments(part_list, list(attendee_part_assignments), gig_instruments, member_song_counts)
+        part_assignments, score = get_gig_song_part_assignments(part_list, list(attendee_part_assignments), gig_instruments, member_song_counts, song_to_overrides.get(song, []))
+        if part_assignments is None:
+            # invalid constraints
+            continue
+
         gig_part_assignments.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
 
         member_song_counts.update([pa.member for pa in part_assignments])

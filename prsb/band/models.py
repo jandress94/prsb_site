@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -141,3 +142,17 @@ class GigAttendance(models.Model):
 
     def __str__(self):
         return f'{self.gig}: {self.member} ({self.status})'
+
+
+def callable_limit(*args, **kwargs):
+    print('hello', *args, **kwargs)
+    return {}
+
+
+class GigPartAssignmentOverride(models.Model):
+    member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
+    song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
+    gig_instrument = models.ForeignKey(GigInstrument, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f'{self.member} plays {self.gig_instrument.instrument} on {self.song_part} at {self.gig_instrument.gig}'
