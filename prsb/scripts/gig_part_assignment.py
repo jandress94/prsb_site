@@ -23,10 +23,6 @@ class ScoringConfig:
 
 
 class GigPartAssignment:
-    song: Song
-    part_assignments: list[PartAssignment]
-    score: float
-
     def __init__(self, song: Song, part_assignments: list[PartAssignment], score: float,
                  attendees: list[BandMember], gig_instruments: list[GigInstrument]):
         self.song = song

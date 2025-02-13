@@ -104,6 +104,12 @@ class PartAssignment(models.Model):
     def __str__(self):
         return f'{self.member} plays {self.instrument} on {self.song_part}'
 
+    def is_backup(self) -> bool:
+        return self.performance_readiness == PerformanceReadiness.BACKUP
+
+    def is_not_ready(self) -> bool:
+        return self.performance_readiness == PerformanceReadiness.NOT_READY
+
 
 class Gig(models.Model):
     name = models.CharField(max_length=256)

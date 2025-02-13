@@ -32,7 +32,7 @@
     <div>
         <h2>Part Assignments</h2>
 
-        <table>
+        <table class="sortable">
             <thead>
                 <tr>
                     <th>Song</th>
@@ -43,9 +43,9 @@
 
             <tbody>
                 {% for part_assignment in part_assignments %}
-                    <tr>
+                    <tr {% if part_assignment.is_backup %} class="warning" {% elif part_assignment.is_not_ready %} class="error" {% endif %}>
                         <td>{{ part_assignment.song_part.song }}</td>
-                        <td>{{ part_assignment.song_part.name }}</td>
+                        <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                         <td>{{ part_assignment.instrument }}</td>
                     </tr>
                 {% endfor %}

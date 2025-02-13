@@ -90,9 +90,18 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {# the song parts not being played #}
+                    {% for song_part in gpa.unplayed_parts %}
+                        <tr class="error">
+                            <td></td>
+                            <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
+                            <td></td>
+                        </tr>
+                    {% endfor %}
+
                     {# the people playing parts #}
                     {% for part_assignment in gpa.part_assignments %}
-                        <tr>
+                        <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
                             <td>{{ part_assignment.member }}</td>
                             <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
                             <td>{{ part_assignment.instrument }}</td>
@@ -101,25 +110,16 @@
 
                     {# the members not playing #}
                     {% for member in gpa.non_players %}
-                        <tr class="warning">
+                        <tr>
                             <td>{{ member }}</td>
                             <td sorttable_customkey=100></td>
                             <td></td>
                         </tr>
                     {% endfor %}
 
-                    {# the song parts not being played #}
-                    {% for song_part in gpa.unplayed_parts %}
-                        <tr class="warning">
-                            <td></td>
-                            <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
-                            <td></td>
-                        </tr>
-                    {% endfor %}
-
                     {# the instruments not being played #}
                     {% for instrument, cnt in gpa.unplayed_instruments.items %}
-                        <tr class="warning">
+                        <tr>
                             <td></td>
                             <td sorttable_customkey=100></td>
                             <td>{{ instrument }} ({{ cnt }})</td>
