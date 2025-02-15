@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.db.models.signals import post_save
@@ -131,6 +132,7 @@ class GigInstrument(models.Model):
     def __str__(self):
         return f'{self.gig}: {self.instrument}'
 
+
 class GigAttendance(models.Model):
     AVAILABLE = "available"
     UNAVAILABLE = "unavailable"
@@ -154,11 +156,6 @@ class GigAttendance(models.Model):
         return f'{self.gig}: {self.member} ({self.status})'
 
 
-def callable_limit(*args, **kwargs):
-    print('hello', *args, **kwargs)
-    return {}
-
-
 class GigPartAssignmentOverride(models.Model):
     member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
@@ -169,3 +166,9 @@ class GigPartAssignmentOverride(models.Model):
 
     def __str__(self):
         return f'{self.member} plays {self.gig_instrument.instrument} on {self.song_part} at {self.gig_instrument.gig}'
+
+    def clean(self):
+        if GigPartAssignmentOverride.objects.filter(member=self.member,
+                                                    gig_instrument__gig=self.gig_instrument.gig,
+                                                    song_part__song=self.song_part.song).exclude(pk=self.pk).exists():
+            raise ValidationError("A band member can only have one override per song per gig")
