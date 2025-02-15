@@ -3,33 +3,17 @@ runtime: python311
 build:
   commands:
     build:
-      - pip3 install pipx
-      - pipx install poetry
-      - poetry install
-#    post-build:
-#      - python3 manage.py test
-#  env:
-#    - name: DJANGO_SETTINGS_MODULE
-#      value: "django_apprunner.settings"
-#    - name: MY_VAR_EXAMPLE
-#      value: "example"
+      - echo "build command"
 run:
   runtime-version: 3.11
-#  pre-run:
-#    - pip3 install pipenv
-#    - pipenv install
-#    - python3 manage.py migrate
-  command: poetry run pip freeze
-#  network:
-#    port: 8000
-#    env: MY_APP_PORT
-#  env:
-#    - name: MY_VAR_EXAMPLE
-#      value: "example"
-#  secrets:
-#    - name: my-secret
-#      value-from: "arn:aws:secretsmanager:us-east-1:123456789012:secret:testingstackAppRunnerConstr-kJFXde2ULKbT-S7t8xR:username::"
-#    - name: my-parameter
-#      value-from: "arn:aws:ssm:us-east-1:123456789012:parameter/parameter-name"
-#    - name: my-parameter-only-name
-#      value-from: "parameter-name"
+  pre-run:
+    - echo "Installing dependencies"
+    - pip3 install poetry==2.0.1
+    - poetry install --no-root --only=main
+    - mv prsb prsb-temp
+    - mv prsb-temp/* prsb-temp/.* ./
+    - rm -r prsb-temp
+  command: poetry run gunicorn prsb.wsgi:application --bind 0.0.0.0:8000
+  network:
+    port: 8000
+    env: MY_APP_PORT
