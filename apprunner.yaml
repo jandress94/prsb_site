@@ -17,3 +17,11 @@ run:
   network:
     port: 8000
     env: MY_APP_PORT
+  env:
+    - name: ALLOWED_HOSTS
+      value: "https://7mupxdnepb.us-west-2.awsapprunner.com/"
+  secrets:
+    - name: PG_HOST
+      value-from: "arn:aws:secretsmanager:us-west-2:905418288995:secret:prsb_pg_dev-TLuCiW:host::"
+    - name: PG_PASSWORD
+      value-from: "arn:aws:secretsmanager:us-west-2:905418288995:secret:prsb_pg_dev-TLuCiW:password::"
