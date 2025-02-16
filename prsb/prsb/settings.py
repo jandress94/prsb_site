@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-!kn47z^n*f+)82j6+z=84^=3laof=__r5bd%i4@(st7=p8=u69
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['7mupxdnepb.us-west-2.awsapprunner.com']
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1").split(',')
 
 
 # Application definition
@@ -77,11 +77,14 @@ WSGI_APPLICATION = 'prsb.wsgi.application'
 
 DATABASES = {
     "default": {
+        "NAME": "pg_db_service",
         "ENGINE": "django.db.backends.postgresql",
         "OPTIONS": {
-            "service": "prsb_db_service",
-            # "passfile": ".prsb_pgpass",
-            "passfile": "/Users/jim/Documents/other.nosync/prsb_site/prsb/.prsb_pgpass"
+            "host": os.environ['PG_HOST'],
+            "user": "prsb_postgres",
+            "password": os.environ['PG_PASSWORD'],
+            "dbname": "prsb_db",
+            "port": 5432,
         },
     }
 }

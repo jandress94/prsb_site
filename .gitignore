@@ -1,6 +1,6 @@
 notes.txt
 resources/data/*
-prsb/.prsb_pgpass
+env_vars/*
 
 .DS_Store
 .gradle
