@@ -1,6 +1,7 @@
 notes.txt
 resources/data/*
 env_vars/*
+build.zip
 
 .DS_Store
 .gradle
