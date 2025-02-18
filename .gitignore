@@ -2,6 +2,7 @@ notes.txt
 resources/data/*
 env_vars/*
 build.zip
+prsb/staticfiles/*
 
 .DS_Store
 .gradle
