@@ -93,6 +93,43 @@ class SongCreateView(generic.CreateView):
 #                 'member__user__first_name',
 #                 'member__user__last_name']
 
+class PartAssignmentForm(forms.ModelForm):
+    class Meta:
+        model = PartAssignment
+        fields = ['member', 'song_part', 'instrument', 'performance_readiness']
+
+    def __init__(self, *args, **kwargs):
+        self.member_id = kwargs.pop('member_id')
+        super().__init__(*args, **kwargs)
+
+
+class MemberPartAssignmentCreateView(generic.CreateView):
+    model = PartAssignment
+    form_class = PartAssignmentForm
+    template_name_suffix = '_create_form'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['member_id'] = self.kwargs['member_id']
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("band:member_detail", kwargs={"pk": self.kwargs['member_id']})
+
+
+class MemberPartAssignmentUpdateView(generic.UpdateView):
+    model = PartAssignment
+    form_class = PartAssignmentForm
+    template_name_suffix = '_update_form'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['member_id'] = self.kwargs['member_id']
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("band:member_detail", kwargs={"pk": self.kwargs['member_id']})
+
 
 class GigListView(generic.ListView):
     model = Gig
@@ -130,7 +167,9 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
         self.gig_id = kwargs.pop('gig_id')
         super().__init__(*args, **kwargs)
 
-        self.fields['member'].queryset = BandMember.objects.filter(Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig_id=self.gig_id, status=GigAttendance.AVAILABLE)),
+        self.fields['member'].queryset = BandMember.objects.filter(Exists(GigAttendance.objects.filter(member=OuterRef("pk"),
+                                                                                                       gig_id=self.gig_id,
+                                                                                                       status=GigAttendance.AVAILABLE)),
                                                                    user__is_active=True)
         self.fields['song_part'].queryset = SongPart.objects.filter(song__in_gig_rotation=True).order_by('song', '_order')
         self.fields['gig_instrument'].queryset = GigInstrument.objects.filter(gig_id=self.gig_id)

@@ -16,6 +16,9 @@ urlpatterns = [
     path("members/", views.MemberListView.as_view(), name="member_list"),
     path("members/<int:pk>/", views.MemberDetailView.as_view(), name="member_detail"),
     # path("members/<int:pk>/update/", views.MemberUpdateView.as_view(), name="member_update"),
+    path("members/<int:member_id>/part-assignments/create/", views.MemberPartAssignmentCreateView.as_view(), name='member_part_assignment_create'),
+    path("members/<int:member_id>/part-assignments/<int:pk>/update/",
+         views.MemberPartAssignmentUpdateView.as_view(), name="member_part_assignment_update"),
 
     path("songs/", views.SongListView.as_view(), name="song_list"),
     path("songs/create/", views.SongCreateView.as_view(), name="song_create"),
