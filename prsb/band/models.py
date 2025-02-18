@@ -114,9 +114,14 @@ class PartAssignment(models.Model):
 
 class Gig(models.Model):
     name = models.CharField(max_length=256)
+    start_datetime = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-start_datetime"]
 
     def __str__(self):
-        return self.name
+        return f"{self.name}"
+        # return f"{self.name} ({self.start_datetime.date()})"
 
 
 class GigInstrument(models.Model):

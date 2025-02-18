@@ -4,9 +4,18 @@
 
 {% block content %}
     <h2>Gigs</h2>
+
+    <h3>Upcoming Gigs</h3>
     <ul>
-        {% for gig in object_list %}
-            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a></li>
+        {% for gig in upcoming_gigs %}
+            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }}</a></li>
+        {% endfor %}
+    </ul>
+
+    <h3>Past Gigs</h3>
+    <ul>
+        {% for gig in past_gigs %}
+            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }}</a></li>
         {% endfor %}
     </ul>
 

@@ -3,6 +3,7 @@ from django import forms
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils import timezone
 from django.views import generic
 
 from scripts.gig_part_assignment import get_gig_part_assignments
@@ -173,6 +174,12 @@ class SongPartAssignmentUpdateView(generic.UpdateView):
 
 class GigListView(generic.ListView):
     model = Gig
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['upcoming_gigs'] = Gig.objects.filter(start_datetime__gte=timezone.now())
+        context['past_gigs'] = Gig.objects.filter(start_datetime__lt=timezone.now())
+        return context
 
 
 class GigDetailView(generic.DetailView):
