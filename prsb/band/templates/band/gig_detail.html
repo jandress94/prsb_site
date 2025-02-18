@@ -1,9 +1,10 @@
 {% extends "band/base.html" %}
+{% load tz %}
 
 {% block title %}{{ gig.name }} | PRSB{% endblock %}
-
 {% block content %}
     <h1>{{gig.name}}</h1>
+    Start: {{ gig.start_datetime|localtime }}
 
     <h2>Band Member Availability</h2>
     <table>

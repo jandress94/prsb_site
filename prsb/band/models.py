@@ -4,6 +4,7 @@ from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
+from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 from django.contrib.auth.models import User
 
@@ -120,8 +121,7 @@ class Gig(models.Model):
         ordering = ["-start_datetime"]
 
     def __str__(self):
-        return f"{self.name}"
-        # return f"{self.name} ({self.start_datetime.date()})"
+        return self.name
 
 
 class GigInstrument(models.Model):

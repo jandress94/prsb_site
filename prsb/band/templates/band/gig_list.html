@@ -1,4 +1,5 @@
 {% extends "band/base.html" %}
+{% load tz %}qq
 
 {% block title %}Gigs | PRSB{% endblock %}
 
@@ -8,14 +9,14 @@
     <h3>Upcoming Gigs</h3>
     <ul>
         {% for gig in upcoming_gigs %}
-            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }}</a></li>
+            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }} ({{ gig.start_datetime|localtime|date:"Y-m-d" }})</a></li>
         {% endfor %}
     </ul>
 
     <h3>Past Gigs</h3>
     <ul>
         {% for gig in past_gigs %}
-            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }}</a></li>
+            <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }} ({{ gig.start_datetime|localtime|date:"Y-m-d" }})</a></li>
         {% endfor %}
     </ul>
 
