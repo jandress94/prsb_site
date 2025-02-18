@@ -100,13 +100,19 @@ class PartAssignmentForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         member_id = kwargs.pop('member_id', None)
+        song_id = kwargs.pop('song_id', None)
         super().__init__(*args, **kwargs)
 
         if member_id is not None:
             self.fields['member'].initial = BandMember.objects.get(pk=member_id)
             self.fields['member'].queryset = BandMember.objects.filter(pk=member_id)
+        else:
+            self.fields['member'].queryset = BandMember.objects.filter(user__is_active=True)
 
-        self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
+        if song_id is not None:
+            self.fields['song_part'].queryset = SongPart.objects.filter(song_id=song_id).order_by('song', '_order')
+        else:
+            self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
 
 
 class MemberPartAssignmentCreateView(generic.CreateView):
@@ -135,6 +141,34 @@ class MemberPartAssignmentUpdateView(generic.UpdateView):
 
     def get_success_url(self):
         return reverse("band:member_detail", kwargs={"pk": self.kwargs['member_id']})
+
+
+class SongPartAssignmentCreateView(generic.CreateView):
+    model = PartAssignment
+    form_class = PartAssignmentForm
+    template_name_suffix = '_create_form'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['song_id'] = self.kwargs['song_id']
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("band:song_detail", kwargs={"pk": self.kwargs['song_id']})
+
+
+class SongPartAssignmentUpdateView(generic.UpdateView):
+    model = PartAssignment
+    form_class = PartAssignmentForm
+    template_name_suffix = '_update_form'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['song_id'] = self.kwargs['song_id']
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("band:song_detail", kwargs={"pk": self.kwargs['song_id']})
 
 
 class GigListView(generic.ListView):

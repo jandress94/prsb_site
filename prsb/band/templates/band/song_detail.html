@@ -24,12 +24,16 @@
 
     <div>
         <h2>Part Assignments</h2>
+
+        <a href={% url 'band:song_part_assignment_create' song.pk %}>New Part Assignment</a>
+
         <table class="sortable">
             <thead>
                 <tr>
                     <th>Part</th>
                     <th>Instrument</th>
                     <th>Band Member</th>
+                    <th></th>
                 </tr>
             </thead>
 
@@ -39,6 +43,7 @@
                         <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                         <td>{{ part_assignment.instrument }}</td>
                         <td>{{ part_assignment.member.user.get_full_name }}</td>
+                        <td><a href={% url 'band:song_part_assignment_update' song_id=song.pk pk=part_assignment.pk %}>Edit</a></td>
                     </tr>
                 {% endfor %}
             </tbody>
