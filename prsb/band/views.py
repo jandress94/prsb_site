@@ -99,8 +99,14 @@ class PartAssignmentForm(forms.ModelForm):
         fields = ['member', 'song_part', 'instrument', 'performance_readiness']
 
     def __init__(self, *args, **kwargs):
-        self.member_id = kwargs.pop('member_id')
+        member_id = kwargs.pop('member_id', None)
         super().__init__(*args, **kwargs)
+
+        if member_id is not None:
+            self.fields['member'].initial = BandMember.objects.get(pk=member_id)
+            self.fields['member'].queryset = BandMember.objects.filter(pk=member_id)
+
+        self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
 
 
 class MemberPartAssignmentCreateView(generic.CreateView):
