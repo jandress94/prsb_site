@@ -1,0 +1,11 @@
+{% extends "band/base.html" %}
+
+{% block title %}New Gig Part Assignment Override | PRSB{% endblock %}
+
+{% block content %}
+    <form method="post">{% csrf_token %}
+        {{ form.as_p }}
+        <input type="submit" value="Create">
+    </form>
+    <a href={% url 'band:gig_detail' form.gig_id %}>Cancel</a>
+{% endblock %}

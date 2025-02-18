@@ -52,8 +52,9 @@
         {% endfor %}
     </ul>
 
+    <h2>Part Assignment Overrides</h2>
+    <a href={% url 'band:gig_part_assignment_override_create' gig.id %}>Add new Part Assignment Override</a>
     {% if part_assignment_overrides %}
-        <h2>Part Assignment Overrides</h2>
         <table class="sortable">
             <thead>
                 <tr>

@@ -1,12 +1,13 @@
 from django.db.models import Exists, OuterRef
-from django.forms import forms
+from django import forms
 from django.http import HttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.views import generic
 
 from scripts.gig_part_assignment import get_gig_part_assignments
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
-    GigPartAssignmentOverride
+    GigPartAssignmentOverride, GigInstrument
 
 
 def index(request):
@@ -118,6 +119,35 @@ class GigDetailView(generic.DetailView):
         ).order_by('user__first_name', 'user__last_name')
 
         return context
+
+
+class GigPartAssignmentOverrideForm(forms.ModelForm):
+    class Meta:
+        model = GigPartAssignmentOverride
+        fields = ['member', 'song_part', 'gig_instrument', 'performance_readiness']
+
+    def __init__(self, *args, **kwargs):
+        self.gig_id = kwargs.pop('gig_id')
+        super().__init__(*args, **kwargs)
+
+        self.fields['member'].queryset = BandMember.objects.filter(Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig_id=self.gig_id, status=GigAttendance.AVAILABLE)),
+                                                                   user__is_active=True)
+        self.fields['song_part'].queryset = SongPart.objects.filter(song__in_gig_rotation=True).order_by('song', '_order')
+        self.fields['gig_instrument'].queryset = GigInstrument.objects.filter(gig_id=self.gig_id)
+
+
+class GigPartAssignmentOverrideCreateView(generic.CreateView):
+    model = GigPartAssignmentOverride
+    form_class = GigPartAssignmentOverrideForm
+    template_name_suffix = '_create_form'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['gig_id'] = self.kwargs['pk']
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("band:gig_detail", kwargs={"pk": self.kwargs['pk']})
 
 
 class InstrumentListView(generic.ListView):

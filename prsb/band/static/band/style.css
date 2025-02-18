@@ -111,7 +111,7 @@ tr.warning {
     background-color: #F6D9B8;
 }
 
-tr.error {
+tr.error, ul.errorlist {
     background-color: #F6D7C5;
 }
 
