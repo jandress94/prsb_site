@@ -155,6 +155,9 @@ class PartAssignmentListView(generic.ListView):
                 'member__user__first_name',
                 'member__user__last_name']
 
+    def get_queryset(self):
+        return PartAssignment.objects.filter(member__user__is_active=True)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['missing_person_songs'] = get_missing_person_songs()
