@@ -68,9 +68,17 @@ class SongDetailView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        context["part_assignments"] = PartAssignment.objects.filter(
-            song_part__song=context['song']
+        song = context['song']
+
+        context["part_assignments"] = part_assignments = PartAssignment.objects.filter(
+            song_part__song=song
         ).order_by('song_part___order', 'instrument__name', 'member__user__first_name', 'member__user__last_name')
+
+        all_parts = SongPart.objects.filter(song=song)
+        context['missing_parts'] = [p for p in all_parts if p not in {pa.song_part for pa in part_assignments}]
+
+        all_members = BandMember.objects.filter(user__is_active=True)
+        context['missing_members'] = [m for m in all_members if m not in {pa.member for pa in part_assignments}]
 
         return context
 

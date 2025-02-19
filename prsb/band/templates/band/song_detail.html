@@ -38,12 +38,32 @@
             </thead>
 
             <tbody>
+{#                missing parts #}
+                {% for missing_part in missing_parts %}
+                    <tr class="error">
+                        <td sorttable_customkey={{ missing_part.get_order }}>{{ missing_part.name }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                {% endfor %}
+
                 {% for part_assignment in part_assignments %}
                     <tr {% if part_assignment.is_backup %} class="warning" {% elif part_assignment.is_not_ready %} class="error" {% endif %}>
                         <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                         <td>{{ part_assignment.instrument }}</td>
                         <td>{{ part_assignment.member.user.get_full_name }}</td>
                         <td><a href={% url 'band:song_part_assignment_update' song_id=song.pk pk=part_assignment.pk %}>Edit</a></td>
+                    </tr>
+                {% endfor %}
+
+{#                missing members #}
+                {% for missing_member in missing_members %}
+                    <tr>
+                        <td sorttable_customkey=100></td>
+                        <td></td>
+                        <td>{{ missing_member.user.get_full_name }}</td>
+                        <td></td>
                     </tr>
                 {% endfor %}
             </tbody>
