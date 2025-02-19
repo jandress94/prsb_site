@@ -187,8 +187,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     return gig_part_assignments, score
 
 
-def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]):
-    t0 = datetime.now()
+def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignment], Counter]:
     attendees = BandMember.objects.filter(gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE)
     gig_instruments: list[GigInstrument] = list(GigInstrument.objects.filter(gig=gig))
 
@@ -220,10 +219,7 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
 
         member_song_counts.update([pa.member for pa in part_assignments])
 
-    print(datetime.now() - t0)
-    print(member_song_counts)
-    print(sum(member_song_counts.values()), np.std(list(member_song_counts.values())))
-    return sorted(gig_part_assignments, key=lambda x: (-x.score, x.song.title))
+    return sorted(gig_part_assignments, key=lambda x: (-x.score, x.song.title)), member_song_counts
 
 
 def main():

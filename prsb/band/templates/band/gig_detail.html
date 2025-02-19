@@ -132,5 +132,23 @@
         </details>
     {% endfor %}
 
+    <h2>Number of Songs per Person</h2>
+    <table class="sortable">
+        <thead>
+            <tr>
+                <th>Band Member</th>
+                <th>Number of Songs</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for member, cnt in member_song_counts %}
+                <tr>
+                    <td>{{ member }}</td>
+                    <td>{{ cnt }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
     <a href={% url 'band:gig_list' %}>Back to Gigs</a>
 {% endblock %}
