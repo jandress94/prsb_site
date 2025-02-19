@@ -4,7 +4,7 @@
 
 {% block content %}
     <h2>Part Assignments</h2>
-    <table>
+    <table class="sortable">
         <thead>
             <tr>
                 <th>Song</th>
@@ -18,9 +18,18 @@
             {% for part_assignment in object_list %}
                 <tr>
                     <td>{{ part_assignment.song_part.song }}</td>
-                    <td>{{ part_assignment.song_part.name }}</td>
+                    <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                     <td>{{ part_assignment.instrument }}</td>
                     <td>{{ part_assignment.member }}</td>
+                </tr>
+            {% endfor %}
+
+            {% for member, song in missing_person_songs %}
+                <tr>
+                    <td>{{ song }}</td>
+                    <td sorttable_customkey=100></td>
+                    <td></td>
+                    <td>{{ member }}</td>
                 </tr>
             {% endfor %}
         </tbody>

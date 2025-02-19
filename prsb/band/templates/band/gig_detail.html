@@ -60,18 +60,18 @@
             <thead>
                 <tr>
                     <th>Song</th>
-                    <th>Band Member</th>
                     <th>Part</th>
                     <th>Instrument</th>
+                    <th>Band Member</th>
                 </tr>
             </thead>
             <tbody>
                 {% for pao in part_assignment_overrides %}
                     <tr>
                         <td>{{ pao.song_part.song }}</td>
-                        <td>{{ pao.member }}</td>
                         <td>{{ pao.song_part }}</td>
                         <td>{{ pao.gig_instrument.instrument }}</td>
+                        <td>{{ pao.member }}</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -86,17 +86,17 @@
             <table class="sortable">
                 <thead>
                     <tr>
-                        <th>Band Member</th>
                         <th>Part</th>
                         <th>Instrument</th>
+                        <th>Band Member</th>
                     </tr>
                 </thead>
                 <tbody>
                     {# the song parts not being played #}
                     {% for song_part in gpa.unplayed_parts %}
                         <tr class="error">
-                            <td></td>
                             <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
+                            <td></td>
                             <td></td>
                         </tr>
                     {% endfor %}
@@ -104,27 +104,27 @@
                     {# the people playing parts #}
                     {% for part_assignment in gpa.part_assignments %}
                         <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
-                            <td>{{ part_assignment.member }}</td>
                             <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
                             <td>{{ part_assignment.instrument }}</td>
+                            <td>{{ part_assignment.member }}</td>
                         </tr>
                     {% endfor %}
 
                     {# the members not playing #}
                     {% for member in gpa.non_players %}
                         <tr>
-                            <td>{{ member }}</td>
                             <td sorttable_customkey=100></td>
                             <td></td>
+                            <td>{{ member }}</td>
                         </tr>
                     {% endfor %}
 
                     {# the instruments not being played #}
                     {% for instrument, cnt in gpa.unplayed_instruments.items %}
                         <tr>
-                            <td></td>
                             <td sorttable_customkey=100></td>
                             <td>{{ instrument }} ({{ cnt }})</td>
+                            <td></td>
                         </tr>
                     {% endfor %}
                 </tbody>

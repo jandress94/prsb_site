@@ -1,6 +1,8 @@
+from django.contrib.auth.models import User
 from django.db.models import Exists, OuterRef
 from django import forms
 from django.http import HttpResponse
+from django.db import connection
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -20,6 +22,10 @@ class MemberListView(generic.ListView):
         return BandMember.objects.filter(user__is_active=True).order_by('user__first_name', 'user__last_name')
 
 
+def get_missing_songs_for_member(member: BandMember):
+    return Song.objects.filter(~Exists(PartAssignment.objects.filter(member=member, song_part__song=OuterRef("pk"))))
+
+
 class MemberDetailView(generic.DetailView):
     model = BandMember
 
@@ -33,8 +39,11 @@ class MemberDetailView(generic.DetailView):
             member=current_member
         ).order_by('song_part__song__title', 'song_part___order', 'instrument__name')
 
+        context["missing_songs"] = get_missing_songs_for_member(current_member)
+
         context["upcoming_gig_attendance"] = GigAttendance.objects.filter(
-            member=current_member
+            member=current_member,
+            gig__start_datetime__gte=timezone.now()
         )
         return context
 
@@ -86,13 +95,62 @@ class SongCreateView(generic.CreateView):
               'form']
 
 
-# class PartAssignmentListView(generic.ListView):
-#     model = PartAssignment
-#     ordering = ['song_part__song__title',
-#                 'song_part___order',
-#                 'instrument__name',
-#                 'member__user__first_name',
-#                 'member__user__last_name']
+def get_missing_person_songs():
+    with connection.cursor() as cursor:
+        query = f"""
+            WITH missing_ids AS (
+                SELECT
+                    b.user_id,
+                    s.title
+                FROM
+                    {BandMember._meta.db_table} b,
+                    {Song._meta.db_table} s
+                WHERE
+                    NOT EXISTS (
+                        SELECT 
+                            1
+                        FROM 
+                            {PartAssignment._meta.db_table} p
+                        INNER JOIN 
+                            {SongPart._meta.db_table} sp
+                        ON
+                            p.song_part_id = sp.id
+                        WHERE
+                            p.member_id = b.user_id
+                            AND sp.song_id = s.id
+                    )
+                )
+                SELECT
+                    u.first_name || ' ' || u.last_name AS name,
+                    m.title
+                FROM
+                    missing_ids m
+                INNER JOIN
+                    {User._meta.db_table} u
+                ON
+                    m.user_id = u.id
+                WHERE
+                    u.is_active
+                ORDER BY
+                    title, name
+        """
+        cursor.execute(query)
+
+        return cursor.fetchall()
+
+
+class PartAssignmentListView(generic.ListView):
+    model = PartAssignment
+    ordering = ['song_part__song__title',
+                'song_part___order',
+                'instrument__name',
+                'member__user__first_name',
+                'member__user__last_name']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['missing_person_songs'] = get_missing_person_songs()
+        return context
 
 class PartAssignmentForm(forms.ModelForm):
     class Meta:
