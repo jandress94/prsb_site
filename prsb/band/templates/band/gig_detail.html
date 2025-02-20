@@ -69,8 +69,8 @@
                 {% for pao in part_assignment_overrides %}
                     <tr>
                         <td>{{ pao.song_part.song }}</td>
-                        <td>{{ pao.song_part }}</td>
-                        <td>{{ pao.gig_instrument.instrument }}</td>
+                        <td sorttable_customkey={{ pao.song_part.get_order }}>{{ pao.song_part }}</td>
+                        <td sorttable_customkey={{ pao.gig_instrument.instrument.order }}>{{ pao.gig_instrument.instrument }}</td>
                         <td>{{ pao.member }}</td>
                     </tr>
                 {% endfor %}
@@ -96,7 +96,7 @@
                     {% for song_part in gpa.unplayed_parts %}
                         <tr class="error">
                             <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
-                            <td></td>
+                            <td sorttable_customkey=100></td>
                             <td></td>
                         </tr>
                     {% endfor %}
@@ -105,7 +105,7 @@
                     {% for part_assignment in gpa.part_assignments %}
                         <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
                             <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
-                            <td>{{ part_assignment.instrument }}</td>
+                            <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
                             <td>{{ part_assignment.member }}</td>
                         </tr>
                     {% endfor %}
@@ -114,7 +114,7 @@
                     {% for member in gpa.non_players %}
                         <tr>
                             <td sorttable_customkey=100></td>
-                            <td></td>
+                            <td sorttable_customkey=100></td>
                             <td>{{ member }}</td>
                         </tr>
                     {% endfor %}
@@ -123,7 +123,7 @@
                     {% for instrument, cnt in gpa.unplayed_instruments.items %}
                         <tr>
                             <td sorttable_customkey=100></td>
-                            <td>{{ instrument }} ({{ cnt }})</td>
+                            <td sorttable_customkey={{ instrument.order }}>{{ instrument }} ({{ cnt }})</td>
                             <td></td>
                         </tr>
                     {% endfor %}

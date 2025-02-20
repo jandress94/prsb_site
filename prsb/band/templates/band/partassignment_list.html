@@ -19,7 +19,7 @@
                 <tr>
                     <td>{{ part_assignment.song_part.song }}</td>
                     <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
-                    <td>{{ part_assignment.instrument }}</td>
+                    <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
                     <td>{{ part_assignment.member }}</td>
                 </tr>
             {% endfor %}
@@ -28,7 +28,7 @@
                 <tr>
                     <td>{{ song }}</td>
                     <td sorttable_customkey=100></td>
-                    <td></td>
+                    <td sorttable_customkey=100></td>
                     <td>{{ member }}</td>
                 </tr>
             {% endfor %}

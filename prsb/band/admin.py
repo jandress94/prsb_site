@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.db.models import Value
 from django.db.models.functions import Concat
+from ordered_model.admin import OrderedModelAdmin
+
 
 from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument, \
     GigPartAssignmentOverride
@@ -30,7 +32,10 @@ class BandMemberAdmin(admin.ModelAdmin):
 admin.site.register(BandMember, BandMemberAdmin)
 
 
-admin.site.register(Instrument)
+class InstrumentAdmin(OrderedModelAdmin):
+    list_display = ('name', 'move_up_down_links')
+
+admin.site.register(Instrument, InstrumentAdmin)
 
 
 class PartAssignmentAdmin(admin.ModelAdmin):

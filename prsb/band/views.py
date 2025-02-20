@@ -1,7 +1,6 @@
 from django.contrib.auth.models import User
 from django.db.models import Exists, OuterRef
 from django import forms
-from django.http import HttpResponse
 from django.db import connection
 from django.shortcuts import render
 from django.urls import reverse

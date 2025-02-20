@@ -49,7 +49,7 @@
                     <tr {% if part_assignment.is_backup %} class="warning" {% elif part_assignment.is_not_ready %} class="error" {% endif %}>
                         <td>{{ part_assignment.song_part.song }}</td>
                         <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
-                        <td>{{ part_assignment.instrument }}</td>
+                        <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
                         <td><a href={% url 'band:member_part_assignment_update' member_id=part_assignment.member.pk pk=part_assignment.pk %}>Edit</a></td>
                     </tr>
                 {% endfor %}
@@ -58,7 +58,7 @@
                     <tr>
                         <td>{{ missing_song }}</td>
                         <td sorttable_customkey=100></td>
-                        <td></td>
+                        <td sorttable_customkey=100></td>
                         <td></td>
                     </tr>
                 {% endfor %}

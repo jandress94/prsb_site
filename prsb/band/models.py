@@ -1,12 +1,11 @@
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
-from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 from django.contrib.auth.models import User
+from ordered_model.models import OrderedModel
 
 
 class Song(models.Model):
@@ -67,7 +66,7 @@ def update_profile_signal(sender, instance, created, **kwargs):
     instance.bandmember.save()
 
 
-class Instrument(models.Model):
+class Instrument(OrderedModel):
     name = models.CharField(max_length=256)
     quantity = models.PositiveSmallIntegerField(default=1)
 
@@ -133,6 +132,7 @@ class GigInstrument(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['gig', 'instrument'], name='unique GigInstrument')
         ]
+        ordering = ["instrument__order"]
 
     def __str__(self):
         return f'{self.gig}: {self.instrument}'
