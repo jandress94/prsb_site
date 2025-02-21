@@ -5,7 +5,7 @@ from ordered_model.admin import OrderedModelAdmin
 
 
 from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument, \
-    GigPartAssignmentOverride
+    GigPartAssignmentOverride, GigSetlistEntry
 
 
 class SongPartInline(admin.TabularInline):
@@ -45,6 +45,8 @@ admin.site.register(PartAssignment, PartAssignmentAdmin)
 
 
 admin.site.register(Gig)
+
+admin.site.register(GigSetlistEntry)
 
 
 class GigInstrumentAdmin(admin.ModelAdmin):

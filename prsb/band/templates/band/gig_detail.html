@@ -46,6 +46,23 @@
         </tbody>
     </table>
 
+    <h2>Setlist</h2>
+    <ol>
+        {% for set_list_entry in setlist %}
+            <li>{% if set_list_entry.song %}
+                    {{ set_list_entry.song }}
+                {% else %}
+                    Break ({{ set_list_entry.break_duration }})
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ol>
+    Music: {{ music_duration }}
+    {% if total_duration %}
+        <br>
+        Total: {{ total_duration }}
+    {% endif %}
+
     <h2>Instruments</h2>
     <ul>
         {% for gig_instrument in gig.giginstrument_set.all %}

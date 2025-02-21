@@ -123,6 +123,24 @@ class Gig(models.Model):
         return self.name
 
 
+class GigSetlistEntry(models.Model):
+    gig = models.ForeignKey(Gig, on_delete=models.CASCADE)
+
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, null=True, blank=True)
+    break_duration = models.DurationField(null=True, blank=True)
+
+    @property
+    def is_break(self) -> bool:
+        return self.song is None
+
+    def clean(self):
+        if not (self.is_break or (self.break_duration is None)):
+            raise ValidationError("Setlist entries which are songs should not have a break duration defined.")
+
+    class Meta:
+        order_with_respect_to = 'gig'
+
+
 class GigInstrument(models.Model):
     gig = models.ForeignKey(Gig, on_delete=models.CASCADE)
     instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE)

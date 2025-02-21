@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.db.models import Exists, OuterRef
 from django import forms
@@ -9,7 +11,7 @@ from django.views import generic
 
 from scripts.gig_part_assignment import get_gig_part_assignments
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
-    GigPartAssignmentOverride, GigInstrument
+    GigPartAssignmentOverride, GigInstrument, GigSetlistEntry
 
 
 def index(request):
@@ -256,6 +258,25 @@ class GigDetailView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         gig = context['object']
+
+        set_list = GigSetlistEntry.objects.filter(gig=gig)
+        context['setlist'] = set_list
+
+        if len(set_list) > 0:
+            music_duration = timedelta()
+            total_duration = timedelta()
+
+            for set_list_entry in set_list:
+                if set_list_entry.song is None:
+                    total_duration += set_list_entry.break_duration
+                elif set_list_entry.song.duration is not None:
+                    music_duration += set_list_entry.song.duration
+
+            context['music_duration'] = music_duration
+            total_duration += music_duration
+            if total_duration != music_duration:
+                context['total_duration'] = total_duration
+
 
         context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
 
