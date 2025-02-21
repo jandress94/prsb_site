@@ -59,8 +59,7 @@ class MemberDetailView(generic.DetailView):
 
 
 class SongListView(generic.ListView):
-    def get_queryset(self):
-        return Song.objects.filter(in_gig_rotation=True).order_by('title')
+    model = Song
 
 
 class SongDetailView(generic.DetailView):
