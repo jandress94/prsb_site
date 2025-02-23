@@ -33,7 +33,7 @@
         {% endif %}
     {% endfor %}
 
-    <table>
+    <table id="setlist-table">
       <thead>
         <tr>
           <th>Song</th>
@@ -41,23 +41,82 @@
           <th>Remove</th>
         </tr>
       </thead>
-      <tbody id="setlist-entries">
+      <tbody>
         {% for entry_form in formset %}
           <tr class="setlist-row">
-            {{ entry_form.id }}
+            {% for hidden in entry_form.hidden_fields %}
+                {{ hidden }}  {# Keep hidden fields like the form ID #}
+            {% endfor %}
             <td>{{ entry_form.song }}</td>
             <td>{{ entry_form.break_duration }}</td>
-            <td>{{ entry_form.DELETE }}</td>
+            <td>
+                <button type="button" class="remove-entry">❌</button>
+            </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
 
+    <button type="button" id="add-entry">➕ Add Setlist Entry</button>
     <button type="submit">Save Setlist</button>
   </form>
 
-  <form method="get">
-    <button type="button" id="add-entry">➕ Add Setlist Entry</button>
-  </form>
+<!-- Hidden empty form template -->
+<div id="empty-form" style="display: none;">
+    <table>
+    <tbody>
+    <tr class="setlist-row">
+        {{ formset.empty_form.management_form }}
+        {% for hidden in formset.empty_form.hidden_fields %}
+            {{ hidden }}  {# Keep hidden fields like the form ID #}
+        {% endfor %}
+        <td>{{ formset.empty_form.song }}</td>
+        <td>{{ formset.empty_form.break_duration }}</td>
+        <td>
+            <button type="button" class="remove-entry">❌</button>
+        </td>
+    </tr>
+    </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const tableBody = document.querySelector("#setlist-table tbody"); // Make sure the table body exists
+
+    const addEntryButton = document.querySelector("#add-entry");
+    const emptyFormTemplate = document.querySelector("#empty-form").innerHTML;
+    const totalFormsInput = document.querySelector("#id_form-TOTAL_FORMS");
+
+    function updateFormIndices() {
+        let rows = tableBody.querySelectorAll(".setlist-row");
+        rows.forEach((row, index) => {
+            row.querySelectorAll("[name]").forEach(input => {
+                input.name = input.name.replace(/form-\d+-/, `form-${index}-`);
+                input.id = input.id.replace(/form-\d+-/, `form-${index}-`);
+            });
+        });
+        totalFormsInput.value = rows.length;  // Update form count
+    }
+
+    addEntryButton.addEventListener("click", function () {
+        let newRow = document.createElement("tr");
+        newRow.innerHTML = emptyFormTemplate.replace(/__prefix__/g, totalFormsInput.value);
+        newRow.classList.add("setlist-row");
+        tableBody.appendChild(newRow);  // Append new row to table body
+        updateFormIndices();
+    });
+
+    tableBody.addEventListener("click", function (event) {
+        if (event.target.classList.contains("remove-entry")) {
+            event.target.closest("tr").remove();
+            updateFormIndices();
+        }
+    });
+});
+</script>
 
 {% endblock %}

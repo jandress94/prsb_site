@@ -308,18 +308,7 @@ class GigSetlistEntryForm(forms.ModelForm):
 
         self.fields['song'].queryset = Song.objects.filter(in_gig_rotation=True)
 
-    # def clean(self):
-        # cleaned_data = super().clean()
-        # song = cleaned_data.get('song')
-        # break_duration = cleaned_data.get('break_duration')
-        #
-        # if song is None and break_duration is None:
-        #     raise ValidationError("Either a song must be selected or a break duration must be set.")
-        # if song is not None and break_duration is not None:
-        #     raise ValidationError("A setlist entry should be either a song or a break, not both")
-
-        # return cleaned_data
-GigSetlistEntryFormSet = modelformset_factory(GigSetlistEntry, form=GigSetlistEntryForm, extra=1, can_delete=True, can_delete_extra=True, can_order=True)
+GigSetlistEntryFormSet = modelformset_factory(GigSetlistEntry, form=GigSetlistEntryForm, extra=0, can_delete=True, can_delete_extra=True)
 
 
 class GigSetlistUpdateView(generic.View):
@@ -333,15 +322,20 @@ class GigSetlistUpdateView(generic.View):
     def post(self, request, gig_id):
         gig = get_object_or_404(Gig, id=gig_id)
         formset = GigSetlistEntryFormSet(request.POST)
+        formset.clean()
+
+        for i in range(len(formset.forms) - 1, -1, -1):
+            if not formset.forms[i].cleaned_data:
+                formset.forms.pop(i)
 
         if formset.is_valid():
-            instances = formset.save(commit=False)
-            for instance in instances:
-                instance.gig = gig  # Ensure each entry is linked to the correct gig
-                instance.save()
+            formset.save(commit=False)
+            GigSetlistEntry.objects.filter(gig=gig).exclude(id__in={form.instance.id for form in formset.forms}).delete()
 
-            for obj in formset.deleted_objects:
-                obj.delete()
+            for i, form in enumerate(formset.forms):
+                form.instance.gig = gig  # Ensure each entry is linked to the correct gig
+                form.instance._order = i
+                form.instance.save()
 
             return redirect('band:gig_detail', pk=gig.id)
 
