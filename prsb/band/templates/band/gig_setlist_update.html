@@ -41,9 +41,9 @@
           <th>Remove</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="formset-body">
         {% for entry_form in formset %}
-          <tr class="setlist-row">
+          <tr class="setlist-row" data-form-index="{{ forloop.counter0 }}">
             {% for hidden in entry_form.hidden_fields %}
                 {{ hidden }}  {# Keep hidden fields like the form ID #}
             {% endfor %}
@@ -83,6 +83,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const tableBody = document.querySelector("#setlist-table tbody"); // Make sure the table body exists
@@ -118,5 +119,32 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 });
 </script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const formsetBody = document.getElementById('formset-body');
+
+        // Initialize SortableJS for drag-and-drop reordering
+        const sortable = new Sortable(formsetBody, {
+            handle: '.setlist-row', // Allow drag-and-drop on rows
+            onEnd(evt) {
+                // Update form indices after reordering
+                const rows = formsetBody.querySelectorAll('.setlist-row');
+                rows.forEach((row, index) => {
+                    const formIndex = index;
+                    row.dataset.formIndex = formIndex;
+
+                    // Update hidden input fields to reflect new index
+                    const inputs = row.querySelectorAll('input, select');
+                    inputs.forEach(input => {
+                        const name = input.name.replace(/-\d+-/, `-${formIndex}-`);
+                        input.name = name;
+                        input.id = name;
+                    });
+                });
+            }
+        });
+    });
+</script>
+
 
 {% endblock %}
