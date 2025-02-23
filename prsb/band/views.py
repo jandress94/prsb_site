@@ -6,6 +6,7 @@ from django.db.models import Exists, OuterRef
 from django import forms, views
 from django.db import connection
 from django.forms import modelformset_factory
+from django.http import HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -302,6 +303,11 @@ class GigSetlistEntryForm(forms.ModelForm):
         model = GigSetlistEntry
         fields = ['song', 'break_duration']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields['song'].queryset = Song.objects.filter(in_gig_rotation=True)
+
     def clean(self):
         cleaned_data = super().clean()
         song = cleaned_data.get('song')
@@ -352,6 +358,15 @@ class GigSetlistUpdateView(generic.FormView):
     def get_success_url(self):
         # Redirect to the gig detail page
         return reverse_lazy('band:gig_detail', kwargs={'pk': self.gig.id})
+
+
+class GigSetlistAddSongView(generic.View):
+    def get(self, request, *args, **kwargs):
+        gig_id = kwargs['gig_id']
+        setlist_entry = GigSetlistEntry(gig_id=gig_id, song_id=kwargs['song_id'])
+        setlist_entry.save()
+
+        return HttpResponseRedirect(reverse("band:gig_part_assignments_detail", kwargs={'pk': gig_id}))
 
 
 class GigPartAssignmentsDetailView(generic.TemplateView):

@@ -46,7 +46,15 @@ admin.site.register(PartAssignment, PartAssignmentAdmin)
 
 admin.site.register(Gig)
 
-admin.site.register(GigSetlistEntry)
+
+@admin.display(description="Is Break?", boolean=True)
+def setlist_entry_is_break(obj: GigSetlistEntry):
+    return obj.break_duration is not None
+
+class GigSetlistEntryAdmin(admin.ModelAdmin):
+    list_display = ['gig', 'song', setlist_entry_is_break]
+    list_filter = ['gig', ]
+admin.site.register(GigSetlistEntry, GigSetlistEntryAdmin)
 
 
 class GigInstrumentAdmin(admin.ModelAdmin):

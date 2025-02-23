@@ -58,7 +58,11 @@
             </li>
         {% endfor %}
     </ol>
-    Music: {{ music_duration }}
+
+    {% if setlist|length > 0 %}
+        Music: {{ music_duration }}
+    {% endif %}
+
     {% if total_duration %}
         <br>
         Total: {{ total_duration }}
