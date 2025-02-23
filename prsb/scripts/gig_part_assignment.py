@@ -12,7 +12,10 @@ from collections import Counter
 
 django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
-    PerformanceReadiness, GigPartAssignmentOverride
+    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry
+
+
+RAND_SEED = 0
 
 
 class ScoringConfig:
@@ -188,10 +191,13 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
 
 
 def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignment], Counter]:
+    np.random.seed(RAND_SEED)
     attendees = BandMember.objects.filter(gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE)
     gig_instruments: list[GigInstrument] = list(GigInstrument.objects.filter(gig=gig))
 
-    gig_part_assignments = []
+    gig_part_assignments_setlist = []
+    gig_part_assignments_recs = []
+
     member_song_counts = Counter()
 
     all_part_assignments = PartAssignment.objects.filter(~Exists(GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig,
@@ -207,7 +213,12 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
     song_to_part_assignments = {s: list(p) for s, p in groupby(all_part_assignments, lambda pa: pa.song_part.song)}
     song_to_overrides = {s: list(o) for s, o in groupby(part_assignment_overrides, lambda pao: pao.song_part.song)}
 
-    for song, attendee_part_assignments in sorted(song_to_part_assignments.items(), key=lambda s_apa: len(s_apa[1])):
+    setlist_songs = {entry.song for entry in GigSetlistEntry.objects.filter(gig=gig, song__isnull=False)}
+
+    song_counts_to_return = None
+
+    for song, attendee_part_assignments in sorted(song_to_part_assignments.items(), key=lambda s_apa: (s_apa[0] not in setlist_songs, len(s_apa[1]), s_apa[0].title)):
+        is_in_setlist = song in setlist_songs
         part_list = list(song.parts.all())
 
         part_assignments, score = get_gig_song_part_assignments(part_list, list(attendee_part_assignments), gig_instruments, member_song_counts, song_to_overrides.get(song, []))
@@ -215,11 +226,21 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
             # invalid constraints
             continue
 
-        gig_part_assignments.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
-
         member_song_counts.update([pa.member for pa in part_assignments])
 
-    return sorted(gig_part_assignments, key=lambda x: (-x.score, x.song.title)), member_song_counts
+        if is_in_setlist:
+            gig_part_assignments_setlist.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
+            song_counts_to_return = member_song_counts.copy()
+        else:
+            gig_part_assignments_recs.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
+
+    if song_counts_to_return is None:
+        song_counts_to_return = member_song_counts
+
+    gig_part_assignments_setlist = sorted(gig_part_assignments_setlist, key=lambda x: x.song.title)
+    gig_part_assignments_recs = sorted(gig_part_assignments_recs, key=lambda x: (-x.score, x.song.title))
+
+    return gig_part_assignments_setlist, gig_part_assignments_recs, song_counts_to_return
 
 
 def main():

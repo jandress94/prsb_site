@@ -30,8 +30,64 @@
         </table>
     {% endif %}
 
+    {% if gig_part_assignments_setlist|length > 0 %}
+        <h2>Setlist Songs</h2>
+        {% for gpa in gig_part_assignments_setlist %}
+            <details>
+                <summary>{{ gpa.song.title }}</summary>
+
+                <table class="sortable">
+                    <thead>
+                        <tr>
+                            <th>Part</th>
+                            <th>Instrument</th>
+                            <th>Band Member</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    {#                     the song parts not being played#}
+                        {% for song_part in gpa.unplayed_parts %}
+                            <tr class="error">
+                                <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
+                                <td sorttable_customkey=100></td>
+                                <td></td>
+                            </tr>
+                        {% endfor %}
+
+    {#                     the people playing parts#}
+                        {% for part_assignment in gpa.part_assignments %}
+                            <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
+                                <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
+                                <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
+                                <td>{{ part_assignment.member }}</td>
+                            </tr>
+                        {% endfor %}
+
+    {#                     the members not playing#}
+                        {% for member in gpa.non_players %}
+                            <tr>
+                                <td sorttable_customkey=100></td>
+                                <td sorttable_customkey=100></td>
+                                <td>{{ member }}</td>
+                            </tr>
+                        {% endfor %}
+
+    {#                     the instruments not being played#}
+                        {% for instrument, cnt in gpa.unplayed_instruments.items %}
+                            <tr>
+                                <td sorttable_customkey=100></td>
+                                <td sorttable_customkey={{ instrument.order }}>{{ instrument }} ({{ cnt }})</td>
+                                <td></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+        {% endfor %}
+    {% endif %}
+
     <h2>Song Recommendations</h2>
-    {% for gpa in gig_part_assignments %}
+    {% for gpa in gig_part_assignments_recs %}
         <details>
             <summary>{{ gpa.song.title }} ({{ gpa.score|floatformat:2 }})</summary>
 

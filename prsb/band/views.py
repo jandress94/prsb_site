@@ -365,7 +365,7 @@ class GigPartAssignmentsDetailView(generic.TemplateView):
 
         context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
 
-        context["gig_part_assignments"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
+        context["gig_part_assignments_setlist"], context["gig_part_assignments_recs"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
         context['member_song_counts'] = sorted([(k, v) for k, v in member_song_counts.items()], key=lambda x: x[1], reverse=True)
 
         return context
