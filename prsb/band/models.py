@@ -147,7 +147,7 @@ class GigSetlistEntry(models.Model):
     def clean(self):
         super().clean()
         if not (self.is_break or (self.break_duration is None)):
-            raise ValidationError("Setlist entries which are songs should not have a break duration defined.")
+            raise ValidationError("A setlist entry should be either a song or a break, not both")
 
     class Meta:
         order_with_respect_to = 'gig'

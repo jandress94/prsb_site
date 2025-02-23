@@ -308,56 +308,82 @@ class GigSetlistEntryForm(forms.ModelForm):
 
         self.fields['song'].queryset = Song.objects.filter(in_gig_rotation=True)
 
-    def clean(self):
-        cleaned_data = super().clean()
-        song = cleaned_data.get('song')
-        break_duration = cleaned_data.get('break_duration')
+    # def clean(self):
+        # cleaned_data = super().clean()
+        # song = cleaned_data.get('song')
+        # break_duration = cleaned_data.get('break_duration')
+        #
+        # if song is None and break_duration is None:
+        #     raise ValidationError("Either a song must be selected or a break duration must be set.")
+        # if song is not None and break_duration is not None:
+        #     raise ValidationError("A setlist entry should be either a song or a break, not both")
 
-        if song is None and break_duration is None:
-            raise ValidationError("Either a song must be selected or a break duration must be set.")
-        if song is not None and break_duration is not None:
-            raise ValidationError("A setlist entry should be either a song or a break, not both")
-
-        return cleaned_data
+        # return cleaned_data
 GigSetlistEntryFormSet = modelformset_factory(GigSetlistEntry, form=GigSetlistEntryForm, extra=1, can_delete=True, can_delete_extra=True, can_order=True)
 
 
-class GigSetlistUpdateView(generic.FormView):
+class GigSetlistUpdateView(generic.View):
     template_name = 'band/gig_setlist_update.html'
-    form_class = GigSetlistEntryFormSet
 
-    def dispatch(self, request, *args, **kwargs):
-        # Get the Gig object to use in the formset
-        self.gig = get_object_or_404(Gig, id=self.kwargs['gig_id'])
-        return super().dispatch(request, *args, **kwargs)
+    def get(self, request, gig_id):
+        gig = get_object_or_404(Gig, id=gig_id)
+        formset = GigSetlistEntryFormSet(queryset=GigSetlistEntry.objects.filter(gig=gig))
+        return render(request, self.template_name, {'formset': formset, 'gig': gig})
 
-    def get_context_data(self, **kwargs):
-        # Pass the gig to the template context explicitly
-        context = super().get_context_data(**kwargs)
-        context['gig'] = self.gig
-        context['formset'] = GigSetlistEntryFormSet(queryset=GigSetlistEntry.objects.filter(gig=self.gig))
-        return context
+    def post(self, request, gig_id):
+        gig = get_object_or_404(Gig, id=gig_id)
+        formset = GigSetlistEntryFormSet(request.POST)
 
-    def form_valid(self, formset):
-        """Called when the formset is valid."""
-        entries = formset.save(commit=False)
-        for entry in entries:
-            entry.gig = self.gig  # Associate entries with the gig
-            entry.save()
+        if formset.is_valid():
+            instances = formset.save(commit=False)
+            for instance in instances:
+                instance.gig = gig  # Ensure each entry is linked to the correct gig
+                instance.save()
 
-        # Delete entries marked for deletion
-        for obj in formset.deleted_objects:
-            obj.delete()
+            for obj in formset.deleted_objects:
+                obj.delete()
 
-        return redirect(self.get_success_url())
+            return redirect('band:gig_detail', pk=gig.id)
 
-    def form_invalid(self, formset):
-        context = self.get_context_data(formset=formset)
-        return self.render_to_response(context)  # Display the form again with errors
+        return render(request, self.template_name, {'formset': formset, 'gig': gig})
 
-    def get_success_url(self):
-        # Redirect to the gig detail page
-        return reverse_lazy('band:gig_detail', kwargs={'pk': self.gig.id})
+
+# class GigSetlistUpdateView(generic.FormView):
+#     template_name = 'band/gig_setlist_update.html'
+#     form_class = GigSetlistEntryFormSet
+#
+#     def dispatch(self, request, *args, **kwargs):
+#         # Get the Gig object to use in the formset
+#         self.gig = get_object_or_404(Gig, id=self.kwargs['gig_id'])
+#         return super().dispatch(request, *args, **kwargs)
+#
+#     def get_context_data(self, **kwargs):
+#         # Pass the gig to the template context explicitly
+#         context = super().get_context_data(**kwargs)
+#         context['gig'] = self.gig
+#         context['formset'] = GigSetlistEntryFormSet(queryset=GigSetlistEntry.objects.filter(gig=self.gig))
+#         return context
+#
+#     def form_valid(self, formset):
+#         """Called when the formset is valid."""
+#         entries = formset.save(commit=False)
+#         for entry in entries:
+#             entry.gig = self.gig  # Associate entries with the gig
+#             entry.save()
+#
+#         # Delete entries marked for deletion
+#         for obj in formset.deleted_objects:
+#             obj.delete()
+#
+#         return redirect(self.get_success_url())
+#
+#     def form_invalid(self, formset):
+#         context = self.get_context_data(formset=formset)
+#         return self.render_to_response(context)  # Display the form again with errors
+#
+#     def get_success_url(self):
+#         # Redirect to the gig detail page
+#         return reverse_lazy('band:gig_detail', kwargs={'pk': self.gig.id})
 
 
 class GigSetlistAddSongView(generic.View):

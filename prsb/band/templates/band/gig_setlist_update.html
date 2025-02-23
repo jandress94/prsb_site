@@ -4,17 +4,34 @@
 {% block content %}
   <h2>Edit Setlist for {{ gig.name }}</h2>
 
+  {% if formset.non_form_errors %}
+    <div class="error">
+      <strong>Formset Errors:</strong>
+      <ul>
+        {% for error in formset.non_form_errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
   <form method="post">
     {% csrf_token %}
     {{ formset.management_form }}  <!-- Required for managing formset -->
 
-    {% if formset.non_form_errors %}
-        <ul class="errorlist">
-            {% for error in formset.non_form_errors %}
-                <li>{{ error }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
+    {% for entry_form in formset %}
+        {% if entry_form.errors %}
+            <div class="error">
+                {% for field, errors in entry_form.errors.items %}
+                    <ul class="errorlist">
+                        {% for error in errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endfor %}
 
     <table>
       <thead>
