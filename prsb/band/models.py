@@ -6,6 +6,7 @@ from django.urls import reverse
 from phonenumber_field.modelfields import PhoneNumberField
 from django.contrib.auth.models import User
 from ordered_model.models import OrderedModel
+from tinymce import models as tinymce_models
 
 
 class Song(models.Model):
@@ -115,6 +116,16 @@ class PartAssignment(models.Model):
 class Gig(models.Model):
     name = models.CharField(max_length=256)
     start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+
+    address = models.CharField(blank=True)
+
+    notes = tinymce_models.HTMLField(blank=True)
+
+    def clean(self):
+        super().clean()
+        if self.end_datetime <= self.start_datetime:
+            raise ValidationError("A gig cannot end before it begins.")
 
     class Meta:
         ordering = ["-start_datetime"]

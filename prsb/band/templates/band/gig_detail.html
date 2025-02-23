@@ -4,7 +4,10 @@
 {% block title %}{{ gig.name }} | PRSB{% endblock %}
 {% block content %}
     <h1>{{gig.name}}</h1>
-    Start: {{ gig.start_datetime|localtime }}
+    <p>Start: {{ gig.start_datetime|localtime }}</p>
+    <p>End: {{ gig.end_datetime|localtime }}</p>
+    <p>Address: {{ gig.address }}</p>
+    <p>{{ gig.notes|safe }}</p>
 
     <h2>Band Member Availability</h2>
     <table>

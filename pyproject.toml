@@ -16,6 +16,7 @@ scipy = "^1.14.1"
 gunicorn = "^23.0.0"
 whitenoise = "^6.9.0"
 django-ordered-model = "^3.7.4"
+django-tinymce = "^4.1.0"
 
 
 [build-system]

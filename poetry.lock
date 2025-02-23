@@ -76,6 +76,22 @@ phonenumbers = ["phonenumbers (>=7.0.2)"]
 phonenumberslite = ["phonenumberslite (>=7.0.2)"]
 
 [[package]]
+name = "django-tinymce"
+version = "4.1.0"
+description = "A Django application that contains a widget to render a"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
+files = [
+    {file = "django_tinymce-4.1.0-py3-none-any.whl", hash = "sha256:9804836e6d2b08de3b03a27c100f8c2e9633549913eff8b323678a10cd48b94e"},
+    {file = "django_tinymce-4.1.0.tar.gz", hash = "sha256:02e3b70e940fd299f0fbef4315aee5c185664e1eb8cd396b176963954e4357c9"},
+]
+
+[package.dependencies]
+django = ">=3.2"
+
+[[package]]
 name = "gunicorn"
 version = "23.0.0"
 description = "WSGI HTTP Server for UNIX"
@@ -519,4 +535,4 @@ brotli = ["brotli"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "6a962e26ff86b600f8d8b9df805d4dcec7aa56e55185599192a5a575ec8ae33c"
+content-hash = "4a44ebe5de35f220c82ee96a13ebef2b99f07e778cabd18f8a8739932564221f"
