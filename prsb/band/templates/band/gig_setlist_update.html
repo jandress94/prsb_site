@@ -1,0 +1,46 @@
+{% extends "band/base.html" %}
+
+{% block title %}{{ gig.name }} Setlist | PRSB{% endblock %}
+{% block content %}
+  <h2>Edit Setlist for {{ gig.name }}</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}  <!-- Required for managing formset -->
+
+    {% if formset.non_form_errors %}
+        <ul class="errorlist">
+            {% for error in formset.non_form_errors %}
+                <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Song</th>
+          <th>Break Duration</th>
+          <th>Remove</th>
+        </tr>
+      </thead>
+      <tbody id="setlist-entries">
+        {% for entry_form in formset %}
+          <tr class="setlist-row">
+            {{ entry_form.id }}
+            <td>{{ entry_form.song }}</td>
+            <td>{{ entry_form.break_duration }}</td>
+            <td>{{ entry_form.DELETE }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <button type="submit">Save Setlist</button>
+  </form>
+
+  <form method="get">
+    <button type="button" id="add-entry">➕ Add Setlist Entry</button>
+  </form>
+
+{% endblock %}

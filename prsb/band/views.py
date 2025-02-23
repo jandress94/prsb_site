@@ -1,13 +1,16 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef
-from django import forms
+from django import forms, views
 from django.db import connection
-from django.shortcuts import render
-from django.urls import reverse
+from django.forms import modelformset_factory
+from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views import generic
+from django.views.generic import FormView
 
 from scripts.gig_part_assignment import get_gig_part_assignments
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
@@ -277,10 +280,10 @@ class GigDetailView(generic.DetailView):
                 context['total_duration'] = total_duration
 
 
-        context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
-
-        context["gig_part_assignments"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
-        context['member_song_counts'] = sorted([(k, v) for k, v in member_song_counts.items()], key=lambda x: x[1], reverse=True)
+        # context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
+        #
+        # context["gig_part_assignments"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
+        # context['member_song_counts'] = sorted([(k, v) for k, v in member_song_counts.items()], key=lambda x: x[1], reverse=True)
 
         for availability in GigAttendance.AVAILABILITY_CHOICES:
             members = gig.gigattendance_set.filter(status=availability)
@@ -290,6 +293,80 @@ class GigDetailView(generic.DetailView):
             ~Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig=gig)),
             user__is_active=True
         ).order_by('user__first_name', 'user__last_name')
+
+        return context
+
+
+class GigSetlistEntryForm(forms.ModelForm):
+    class Meta:
+        model = GigSetlistEntry
+        fields = ['song', 'break_duration']
+
+    def clean(self):
+        cleaned_data = super().clean()
+        song = cleaned_data.get('song')
+        break_duration = cleaned_data.get('break_duration')
+
+        if song is None and break_duration is None:
+            raise ValidationError("Either a song must be selected or a break duration must be set.")
+        if song is not None and break_duration is not None:
+            raise ValidationError("A setlist entry should be either a song or a break, not both")
+
+        return cleaned_data
+GigSetlistEntryFormSet = modelformset_factory(GigSetlistEntry, form=GigSetlistEntryForm, extra=1, can_delete=True, can_delete_extra=True, can_order=True)
+
+
+class GigSetlistUpdateView(generic.FormView):
+    template_name = 'band/gig_setlist_update.html'
+    form_class = GigSetlistEntryFormSet
+
+    def dispatch(self, request, *args, **kwargs):
+        # Get the Gig object to use in the formset
+        self.gig = get_object_or_404(Gig, id=self.kwargs['gig_id'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        # Pass the gig to the template context explicitly
+        context = super().get_context_data(**kwargs)
+        context['gig'] = self.gig
+        context['formset'] = GigSetlistEntryFormSet(queryset=GigSetlistEntry.objects.filter(gig=self.gig))
+        return context
+
+    def form_valid(self, formset):
+        """Called when the formset is valid."""
+        entries = formset.save(commit=False)
+        for entry in entries:
+            entry.gig = self.gig  # Associate entries with the gig
+            entry.save()
+
+        # Delete entries marked for deletion
+        for obj in formset.deleted_objects:
+            obj.delete()
+
+        return redirect(self.get_success_url())
+
+    def form_invalid(self, formset):
+        context = self.get_context_data(formset=formset)
+        return self.render_to_response(context)  # Display the form again with errors
+
+    def get_success_url(self):
+        # Redirect to the gig detail page
+        return reverse_lazy('band:gig_detail', kwargs={'pk': self.gig.id})
+
+
+class GigPartAssignmentsDetailView(generic.TemplateView):
+    template_name = 'band/gig_part_assignments.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        gig_id = context['pk']
+
+        context['gig'] = gig = Gig.objects.get(id=gig_id)
+
+        context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
+
+        context["gig_part_assignments"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
+        context['member_song_counts'] = sorted([(k, v) for k, v in member_song_counts.items()], key=lambda x: x[1], reverse=True)
 
         return context
 
@@ -322,7 +399,7 @@ class GigPartAssignmentOverrideCreateView(generic.CreateView):
         return kwargs
 
     def get_success_url(self):
-        return reverse("band:gig_detail", kwargs={"pk": self.kwargs['pk']})
+        return reverse("band:gig_part_assignments_detail", kwargs={"pk": self.kwargs['pk']})
 
 
 class InstrumentListView(generic.ListView):

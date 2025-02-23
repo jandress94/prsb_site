@@ -134,6 +134,7 @@ class GigSetlistEntry(models.Model):
         return self.song is None
 
     def clean(self):
+        super().clean()
         if not (self.is_break or (self.break_duration is None)):
             raise ValidationError("Setlist entries which are songs should not have a break duration defined.")
 
@@ -191,6 +192,7 @@ class GigPartAssignmentOverride(models.Model):
         return f'{self.member} plays {self.gig_instrument.instrument} on {self.song_part} at {self.gig_instrument.gig}'
 
     def clean(self):
+        super().clean()
         if GigPartAssignmentOverride.objects.filter(member=self.member,
                                                     gig_instrument__gig=self.gig_instrument.gig,
                                                     song_part__song=self.song_part.song).exclude(pk=self.pk).exists():

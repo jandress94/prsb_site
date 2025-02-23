@@ -7,5 +7,5 @@
         {{ form.as_p }}
         <input type="submit" value="Create">
     </form>
-    <a href={% url 'band:gig_detail' form.gig_id %}>Cancel</a>
+    <a href={% url 'band:gig_part_assignments_detail' form.gig_id %}>Cancel</a>
 {% endblock %}
