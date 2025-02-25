@@ -39,5 +39,5 @@ urlpatterns = [
 
     path("instruments/", views.InstrumentListView.as_view(), name="instrument_list"),
 
-    path("health", views.health_check)
+    path("health/", views.health_check)
 ]
