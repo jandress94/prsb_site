@@ -91,8 +91,6 @@
         <details>
             <summary>{{ gpa.song.title }} ({{ gpa.score|floatformat:2 }})</summary>
 
-            <a href={% url 'band:gig_setlist_add_song' gig_id=gig.id song_id=gpa.song.id %}>Add to Setlist</a>
-
             <table class="sortable">
                 <thead>
                     <tr>
@@ -139,6 +137,8 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            <a href={% url 'band:gig_setlist_add_song' gig_id=gig.id song_id=gpa.song.id %}>Add to Setlist</a>
         </details>
     {% endfor %}
 
