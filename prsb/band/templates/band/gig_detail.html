@@ -1,5 +1,6 @@
 {% extends "band/base.html" %}
 {% load tz %}
+{% load custom_filters %}
 
 {% block title %}{{ gig.name }} | PRSB{% endblock %}
 {% block content %}
@@ -54,21 +55,21 @@
     <ol>
         {% for set_list_entry in setlist %}
             <li>{% if set_list_entry.song %}
-                    {{ set_list_entry.song }}
+                    {{ set_list_entry.song }} ({{ set_list_entry.song.duration|duration_to_minutes_seconds }})
                 {% else %}
-                    Break ({{ set_list_entry.break_duration }})
+                    Break ({{ set_list_entry.break_duration|duration_to_minutes_seconds }})
                 {% endif %}
             </li>
         {% endfor %}
     </ol>
 
     {% if setlist|length > 0 %}
-        Music: {{ music_duration }}
+        Music: {{ music_duration|duration_to_minutes_seconds }}
     {% endif %}
 
     {% if total_duration %}
         <br>
-        Total: {{ total_duration }}
+        Total: {{ total_duration|duration_to_minutes_seconds }}
     {% endif %}
 
     <h2>Instruments</h2>

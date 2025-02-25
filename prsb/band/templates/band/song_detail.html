@@ -1,4 +1,5 @@
 {% extends "band/base.html" %}
+{% load custom_filters %}
 
 {% block title %}{{ song.title }} | PRSB{% endblock %}
 
@@ -9,7 +10,7 @@
 
     <div>
         <p>Composer: {{ song.composer }}</p>
-        <p>Duration: {{ song.duration }}</p>
+        <p>Duration: {{ song.duration|duration_to_minutes_seconds }}</p>
         <p>In Gig Rotation: {{ song.in_gig_rotation }}</p>
         <p>Form: {{ song.form }}</p>
     </div>
