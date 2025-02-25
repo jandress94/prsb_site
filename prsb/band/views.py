@@ -6,7 +6,7 @@ from django.db.models import Exists, OuterRef
 from django import forms, views
 from django.db import connection
 from django.forms import modelformset_factory
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -439,3 +439,12 @@ class GigPartAssignmentOverrideCreateView(generic.CreateView):
 
 class InstrumentListView(generic.ListView):
     model = Instrument
+
+
+def health_check(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        return JsonResponse({"status": "ok", "db": "connected"})
+    except Exception:
+        return JsonResponse({"status": "error", "db": "unreachable"}, status=500)

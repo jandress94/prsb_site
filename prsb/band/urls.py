@@ -38,4 +38,6 @@ urlpatterns = [
     path("gigs/<int:gig_id>/setlist/add-song/<int:song_id>", views.GigSetlistAddSongView.as_view(), name='gig_setlist_add_song'),
 
     path("instruments/", views.InstrumentListView.as_view(), name="instrument_list"),
+
+    path("health", views.health_check)
 ]
