@@ -40,7 +40,6 @@ class MemberDetailView(generic.DetailView):
         current_member = context['bandmember']
 
         context["part_assignments"] = PartAssignment.objects.filter(
-            song_part__song__in_gig_rotation=True,
             member=current_member
         ).order_by('song_part__song__title', 'song_part___order', 'instrument__name')
 

@@ -121,13 +121,13 @@ form {
 }
 
 label {
-    display: block;
+    display: inline-block;
     margin-bottom: 5px;
     font-weight: bold;
 }
 
 input, textarea, select, button {
-    width: 100%;
+    /*width: 100%;*/
     padding: 10px;
     margin-bottom: 15px;
     border: 1px solid #805537; /* Brown for input borders */
