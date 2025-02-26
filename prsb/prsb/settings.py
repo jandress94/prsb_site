@@ -11,23 +11,33 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def get_env_var(var_name: str, default: str | None = None, required: bool = True) -> str | None:
+    value = os.environ.get(var_name, default)
+    if value is None and required:
+        logger.error(f"Missing required environment variable: {var_name}")
+    return value
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
+SECRET_KEY = get_env_var('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', False)
+DEBUG = bool(get_env_var('DEBUG', default='False', required=False))
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1").split(',')
+ALLOWED_HOSTS = get_env_var("ALLOWED_HOSTS", "127.0.0.1").split(',')
 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://127.0.0.1,http://localhost").split(',')
+CSRF_TRUSTED_ORIGINS = get_env_var("CSRF_TRUSTED_ORIGINS", "http://127.0.0.1,http://localhost").split(',')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
@@ -86,9 +96,9 @@ DATABASES = {
         "NAME": "pg_db_service",
         "ENGINE": "django.db.backends.postgresql",
         "OPTIONS": {
-            "host": os.environ['PG_HOST'],
+            "host": get_env_var('PG_HOST'),
             "user": "prsb_postgres",
-            "password": os.environ['PG_PASSWORD'],
+            "password": get_env_var('PG_PASSWORD'),
             "dbname": "prsb_db",
             "port": 5432,
         },
