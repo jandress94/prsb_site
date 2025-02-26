@@ -13,10 +13,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # - name: Set up AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v2
-      #   with:
-      #     TK
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Install dependencies
         run: |
@@ -43,5 +45,18 @@ jobs:
           zip -r $ZIP_FILE prsb Dockerfile poetry.lock pyproject.toml
           echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
 
-
-      
+      - name: Upload to Elastic Beanstalk
+        env:
+          APPLICATION_NAME: Phinney Ridge Steel Band Site
+          ENVIRONMENT_NAME: prsb-site-dev2
+          S3_BUCKET: elasticbeanstalk-us-west-2-905418288995 
+        run: |
+          aws s3 cp $ZIP_FILE s3://$S3_BUCKET/$ZIP_FILE
+          aws elasticbeanstalk create-application-version \
+            --application-name "$APPLICATION_NAME" \
+            --version-label "deploy-${{ github.run_id }}" \
+            --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
+          aws elasticbeanstalk update-environment \
+            --application-name "$APPLICATION_NAME"
+            --environment-name $ENVIRONMENT_NAME
+            --version-label "deploy-${{ github.run_id }}"
