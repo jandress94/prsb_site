@@ -1,0 +1,47 @@
+name: Deploy to Elastic Beanstalk (DEV)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  package-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # - name: Set up AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v2
+      #   with:
+      #     TK
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Install poetry
+        run: pipx install "poetry==2.0.1"
+
+      - name: Install python
+        uses: action/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'poetry'
+
+      - name: Install python Dependencies
+        run: poetry install
+
+      - name: Prep static files
+        run: poetry run python prsb/manage.py collectstatic --noinput
+
+      - name: Package application
+        run: |
+          ZIP_FILE="deploy-${{ github.run_id }}.zip"
+          zip -r $ZIP_FILE prsb Dockerfile poetry.lock pyproject.toml
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+
+
+      
