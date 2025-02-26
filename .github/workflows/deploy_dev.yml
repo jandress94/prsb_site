@@ -58,6 +58,6 @@ jobs:
             --version-label "deploy-${{ github.run_id }}" \
             --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
           aws elasticbeanstalk update-environment \
-            --application-name "$APPLICATION_NAME"
-            --environment-name $ENVIRONMENT_NAME
+            --application-name "$APPLICATION_NAME" \
+            --environment-name $ENVIRONMENT_NAME \
             --version-label "deploy-${{ github.run_id }}"
