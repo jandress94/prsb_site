@@ -436,6 +436,23 @@ class GigPartAssignmentOverrideCreateView(generic.CreateView):
         return reverse("band:gig_part_assignments_detail", kwargs={"pk": self.kwargs['pk']})
 
 
+class GigPartAssignmentPrintView(generic.TemplateView):
+    template_name = 'band/gig_part_assignment_print.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        gig_id = context['pk']
+
+        context['gig'] = gig = Gig.objects.get(id=gig_id)
+
+        overrides = GigPartAssignmentOverride.objects.filter(
+            gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
+
+        context["gig_part_assignments_setlist"], _, _ = get_gig_part_assignments(gig, overrides)
+
+        return context
+
+
 class InstrumentListView(generic.ListView):
     model = Instrument
 

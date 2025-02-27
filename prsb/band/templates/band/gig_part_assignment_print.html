@@ -1,0 +1,48 @@
+{% extends "band/base.html" %}
+{% load static %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'band/css/print.css' %}">
+{% endblock %}
+
+{% block title %}{{ gig.name }} | Part Assignments | PRSB{% endblock %}
+{% block content %}
+    <h1>{{gig.name}}</h1>
+
+    {% for gpa in gig_part_assignments_setlist %}
+        <div class="avoid-break">
+            <h2>{{ gpa.song.title }}</h2>
+
+            <table class="sortable">
+                <thead>
+                    <tr>
+                        <th>Part</th>
+                        <th>Instrument</th>
+                        <th>Band Member</th>
+                    </tr>
+                </thead>
+                <tbody>
+    {#                     the song parts not being played#}
+                    {% for song_part in gpa.unplayed_parts %}
+                        <tr class="error">
+                            <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
+                            <td sorttable_customkey=100></td>
+                            <td></td>
+                        </tr>
+                    {% endfor %}
+
+    {#                     the people playing parts#}
+                    {% for part_assignment in gpa.part_assignments %}
+                        <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
+                            <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
+                            <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
+                            <td>{{ part_assignment.member }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endfor %}
+
+    <a href={% url 'band:gig_part_assignments_detail' gig.id %}>Back to {{ gig.name }} Part Assignments</a>
+{% endblock %}

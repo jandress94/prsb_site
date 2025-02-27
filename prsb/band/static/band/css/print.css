@@ -1,0 +1,57 @@
+/* Apply a serif font for print readability */
+body {
+    font-family: "Georgia", "Times New Roman", serif;
+    color: black;
+    background: white;
+    margin: 0 auto; /* Center content on the page */
+    padding: 20px;
+    max-width: 100%;
+    line-height: 1.1;
+}
+
+/* Ensure headers stand out while remaining print-friendly */
+h1, h2, h3 {
+    font-family: "Georgia", "Times New Roman", serif;
+    color: black;
+    page-break-after: avoid;
+}
+
+/* Adjust tables for print clarity */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12pt;
+    page-break-inside: auto;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: 1px;
+    text-align: left;
+}
+
+/* Remove unnecessary UI elements for print */
+nav, footer, .no-print {
+    display: none;
+}
+
+tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+}
+
+.avoid-break {
+    page-break-inside: avoid;
+}
+
+@media print {
+    body::before {
+        display: none;
+        content: none; /* Ensures it doesn't generate any box */
+    }
+
+    #content {
+        margin-left: 0;
+        max-width: 100%; /* Ensure it uses the full page width */
+    }
+}

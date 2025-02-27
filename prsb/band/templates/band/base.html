@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'band/css/style.css' %}">
+    {% block extra_css %}{% endblock %}
     <link rel="apple-touch-icon" sizes="180x180" href="{% static 'band/images/apple-touch-icon.png' %}">
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'band/images/favicon-32x32.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'band/images/favicon-16x16.png' %}">
@@ -15,15 +16,6 @@
 </head>
 
 <body>
-{#    <div id="sidebar">#}
-{#        {% block sidebar %}#}
-{#        <ul>#}
-{#            <li><a href="/">Home</a></li>#}
-{#            <li><a href="/blog/">Blog</a></li>#}
-{#        </ul>#}
-{#        {% endblock %}#}
-{#    </div>#}
-
     <div id="content">
         {% block content %}{% endblock %}
         {% block extra_js %}{% endblock %}

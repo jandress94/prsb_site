@@ -160,10 +160,15 @@
         </tbody>
     </table>
 
-    <h2>Settings</h2>
+    <h2>Options and Settings</h2>
     <div>
-        <label for="hide-unutilized">Hide Unutilized:</label>
-        <input type="checkbox" id="hide-unutilized" checked>
+        <p>
+            <a href={% url 'band:gig_part_assignment_print' gig.id %}>Print Setlist Part Assignments</a>
+        </p>
+        <p>
+            <label for="hide-unutilized">Hide Unutilized:</label>
+            <input type="checkbox" id="hide-unutilized" checked>
+        </p>
     </div>
 
     <a href={% url 'band:gig_detail' gig.id %}>Back to {{ gig.name }}</a>
