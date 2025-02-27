@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Subquery
 from django import forms, views
 from django.db import connection
 from django.forms import modelformset_factory
@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.views import generic
 from django.views.generic import FormView
 
-from scripts.gig_part_assignment import get_gig_part_assignments
+from scripts.gig_part_assignment import get_gig_part_assignments, GigPartAssignment
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
     GigPartAssignmentOverride, GigInstrument, GigSetlistEntry
 
@@ -261,8 +261,7 @@ class GigDetailView(generic.DetailView):
         context = super().get_context_data(**kwargs)
         gig = context['object']
 
-        set_list = GigSetlistEntry.objects.filter(gig=gig)
-        context['setlist'] = set_list
+        context['setlist'] = set_list = GigSetlistEntry.objects.filter(gig=gig)
 
         if len(set_list) > 0:
             music_duration = timedelta()
@@ -278,12 +277,6 @@ class GigDetailView(generic.DetailView):
             total_duration += music_duration
             if total_duration != music_duration:
                 context['total_duration'] = total_duration
-
-
-        # context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
-        #
-        # context["gig_part_assignments"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
-        # context['member_song_counts'] = sorted([(k, v) for k, v in member_song_counts.items()], key=lambda x: x[1], reverse=True)
 
         for availability in GigAttendance.AVAILABILITY_CHOICES:
             members = gig.gigattendance_set.filter(status=availability)
@@ -439,6 +432,21 @@ class GigPartAssignmentOverrideCreateView(generic.CreateView):
 class GigPartAssignmentPrintView(generic.TemplateView):
     template_name = 'band/gig_part_assignment_print.html'
 
+    @staticmethod
+    def _sort_by_setlist_order(gig: Gig, assignments: list[GigPartAssignment]) -> list[GigPartAssignment]:
+        subquery = GigSetlistEntry.objects.filter(
+            gig=gig,
+            song=OuterRef('song')
+        ).order_by('_order').values('id')[:1]
+        first_entries = GigSetlistEntry.objects.filter(
+            gig=gig,
+            break_duration__isnull=True,
+            id__in=Subquery(subquery)
+        )
+        ordering = {entry.song: entry._order for entry in first_entries}
+
+        return sorted(assignments, key=lambda e: ordering.get(e.song))
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         gig_id = context['pk']
@@ -448,7 +456,13 @@ class GigPartAssignmentPrintView(generic.TemplateView):
         overrides = GigPartAssignmentOverride.objects.filter(
             gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
 
-        context["gig_part_assignments_setlist"], _, _ = get_gig_part_assignments(gig, overrides)
+        assignments, _, _ = get_gig_part_assignments(gig, overrides)
+
+        ordering_method = self.request.GET.get('order', 'alphabetic')
+        if ordering_method == 'setlist':
+            context["gig_part_assignments_setlist"] = self._sort_by_setlist_order(gig, assignments)
+        else:
+            context["gig_part_assignments_setlist"] = assignments
 
         return context
 
