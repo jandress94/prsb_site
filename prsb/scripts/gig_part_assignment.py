@@ -190,7 +190,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     return gig_part_assignments, score
 
 
-def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignment], Counter]:
+def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignment], list[GigPartAssignment], Counter]:
     np.random.seed(RAND_SEED)
     attendees = BandMember.objects.filter(gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE)
     gig_instruments: list[GigInstrument] = list(GigInstrument.objects.filter(gig=gig))

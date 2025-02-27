@@ -34,6 +34,7 @@ urlpatterns = [
     path("gigs/<int:pk>/", views.GigDetailView.as_view(), name="gig_detail"),
     path("gigs/<int:pk>/gig-part-assignments/", views.GigPartAssignmentsDetailView.as_view(), name="gig_part_assignments_detail"),
     path("gigs/<int:pk>/gig-part-assignments/create", views.GigPartAssignmentOverrideCreateView.as_view(), name="gig_part_assignment_override_create"),
+    path("gigs/<int:pk>/gig-part-assignments/print", views.GigPartAssignmentPrintView.as_view(), name="gig_part_assignment_print"),
     path("gigs/<int:gig_id>/setlist/update", views.GigSetlistUpdateView.as_view(), name="gig_setlist_update"),
     path("gigs/<int:gig_id>/setlist/add-song/<int:song_id>", views.GigSetlistAddSongView.as_view(), name='gig_setlist_add_song'),
 
