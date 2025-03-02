@@ -249,8 +249,8 @@ class GigListView(generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['upcoming_gigs'] = Gig.objects.filter(start_datetime__gte=timezone.now()).order_by('start_datetime')
-        context['past_gigs'] = Gig.objects.filter(start_datetime__lt=timezone.now())
+        context['upcoming_gigs'] = Gig.objects.filter(end_datetime__gte=timezone.now()).order_by('start_datetime')
+        context['past_gigs'] = Gig.objects.filter(end_datetime__lt=timezone.now())
         return context
 
 
