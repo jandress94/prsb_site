@@ -3,6 +3,7 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
+from djangoyearlessdate.models import YearlessDateField
 from phonenumber_field.modelfields import PhoneNumberField
 from django.contrib.auth.models import User
 from ordered_model.models import OrderedModel
@@ -48,8 +49,8 @@ class BandMember(models.Model):
     emergency_contact_name = models.CharField(max_length=256, blank=True)
     emergency_contact_phone = PhoneNumberField(null=True, blank=True)
 
-    bio = models.TextField(blank=True)
-    birthday = models.DateField(null=True, blank=True)
+    bio = tinymce_models.HTMLField(blank=True)
+    birthday = YearlessDateField(null=True, blank=True)
     dietary_restrictions = models.TextField(blank=True)
     tshirt_size = models.CharField(max_length=256, blank=True)
 
