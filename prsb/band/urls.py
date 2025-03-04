@@ -4,13 +4,16 @@
 # urls.py
 # Author: Jim Andress
 # Created: 4/28/24
-
+from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 
 from . import views
 
 app_name = "band"
 urlpatterns = [
+    path("accounts/login/", LoginView.as_view(template_name="band/registration/login.html")),
+    path("accounts/logout/", LogoutView.as_view(next_page="login"), name="logout"),
+
     path("", views.index, name='index'),
 
     path("members/", views.MemberListView.as_view(), name="member_list"),
