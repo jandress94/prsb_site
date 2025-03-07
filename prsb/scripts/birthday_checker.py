@@ -37,13 +37,13 @@ def lambda_handler(event, context):
         print(f"Birthdays today!")
         print(birthday_list)
 
-        # send_mail(
-        #     "PRSB Birthdays Today!",
-        #     f"The following band members have their birthday today!\n\n{birthday_list}",
-        #     DEFAULT_FROM_EMAIL,
-        #     BIRTHDAY_EMAIL_RECIPIENTS,
-        #     fail_silently=False,
-        # )
+        send_mail(
+            "PRSB Birthdays Today!",
+            f"The following band members have their birthday today!\n\n{birthday_list}",
+            DEFAULT_FROM_EMAIL,
+            BIRTHDAY_EMAIL_RECIPIENTS,
+            fail_silently=False,
+        )
     else:
         print('No birthdays today.')
 
