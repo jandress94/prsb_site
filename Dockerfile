@@ -27,6 +27,8 @@ COPY --chown=root:root ${SOURCE_DIRECTORY}/ ./
 ENV VIRTUAL_ENV=${APP_HOME}/.venv \
     PATH=${APP_HOME}/.venv/bin:$PATH
 
+RUN pip install awslambdaric
+
 # Expose port
 EXPOSE 8000
 
