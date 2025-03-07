@@ -18,7 +18,7 @@ RUN apt-get update && \
 # Copy and install dependencies first (better caching)
 COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --no-root --only=main
+    poetry install --no-root --without=dev
 
 # Copy application source code
 COPY --chown=root:root ${SOURCE_DIRECTORY}/ ./

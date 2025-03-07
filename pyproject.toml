@@ -9,17 +9,40 @@ packages = [{include = "*", from = "prsb"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 django = "^5.0.4"
-psycopg = {version = "^3.1.18", extras = ["binary"]}
 django-phonenumber-field = {extras = ["phonenumberslite"], version = "^8.0.0"}
-pandas = "^2.2.2"
-scipy = "^1.14.1"
-gunicorn = "^23.0.0"
-whitenoise = "^6.9.0"
 django-ordered-model = "^3.7.4"
 django-tinymce = "^4.1.0"
 django-yearlessdate = "^1.3.1"
+psycopg = {version = "^3.1.18", extras = ["binary"]}
+
+
+[tool.poetry.group.site]
+optional = true
+
+[tool.poetry.group.site.dependencies]
+scipy = "^1.14.1"
+gunicorn = "^23.0.0"
+whitenoise = "^6.9.0"
+
+
+[tool.poetry.group.lambda]
+optional = true
+
+[tool.poetry.group.lambda.dependencies]
+django-ses = "^4.4.0"
+
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+pandas = "^2.2.2"
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.8"

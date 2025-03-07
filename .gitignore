@@ -4,6 +4,9 @@ env_vars/*
 build.zip
 prsb/staticfiles/*
 
+lambda_package/*
+lambda-deployment.zip
+
 .DS_Store
 .gradle
 .idea/

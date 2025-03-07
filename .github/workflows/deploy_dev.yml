@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  ECR_REPOSITORY: prsb
+
 jobs:
   package-and-deploy:
     runs-on: ubuntu-latest
@@ -20,6 +23,10 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Install dependencies
         run: |
@@ -40,24 +47,35 @@ jobs:
       - name: Prep static files
         run: poetry run python prsb/manage.py collectstatic --noinput
 
-      - name: Package application
+      - name: Build and tag Docker image
         run: |
-          ZIP_FILE="deploy-${{ github.run_id }}.zip"
-          zip -r $ZIP_FILE prsb Dockerfile poetry.lock pyproject.toml
-          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+          IMAGE_TAG=$(git rev-parse --short HEAD)
+          docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
-      - name: Upload to Elastic Beanstalk
-        env:
-          APPLICATION_NAME: Phinney Ridge Steel Band Site
-          ENVIRONMENT_NAME: prsb-site-dev2
-          S3_BUCKET: elasticbeanstalk-us-west-2-905418288995 
+      - name: Push Docker image to ECR
         run: |
-          aws s3 cp $ZIP_FILE s3://$S3_BUCKET/$ZIP_FILE
-          aws elasticbeanstalk create-application-version \
-            --application-name "$APPLICATION_NAME" \
-            --version-label "deploy-${{ github.run_id }}" \
-            --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
-          aws elasticbeanstalk update-environment \
-            --application-name "$APPLICATION_NAME" \
-            --environment-name $ENVIRONMENT_NAME \
-            --version-label "deploy-${{ github.run_id }}"
+          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+
+#      - name: Package application
+#        run: |
+#          ZIP_FILE="deploy-${{ github.run_id }}.zip"
+#          zip -r $ZIP_FILE prsb Dockerfile poetry.lock pyproject.toml
+#          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+#
+#      - name: Upload to Elastic Beanstalk
+#        env:
+#          APPLICATION_NAME: Phinney Ridge Steel Band Site
+#          ENVIRONMENT_NAME: prsb-site-dev2
+#          S3_BUCKET: elasticbeanstalk-us-west-2-905418288995
+#        run: |
+#          aws s3 cp $ZIP_FILE s3://$S3_BUCKET/$ZIP_FILE
+#          aws elasticbeanstalk create-application-version \
+#            --application-name "$APPLICATION_NAME" \
+#            --version-label "deploy-${{ github.run_id }}" \
+#            --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
+#          aws elasticbeanstalk update-environment \
+#            --application-name "$APPLICATION_NAME" \
+#            --environment-name $ENVIRONMENT_NAME \
+#            --version-label "deploy-${{ github.run_id }}"
