@@ -30,6 +30,7 @@ optional = true
 
 [tool.poetry.group.lambda.dependencies]
 django-ses = "^4.4.0"
+awslambdaric = "^3.0.2"
 
 
 [tool.poetry.group.dev]
