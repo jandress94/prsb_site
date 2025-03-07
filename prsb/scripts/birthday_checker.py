@@ -14,6 +14,7 @@ django.setup()
 
 from django.core.mail import send_mail
 from django.utils import timezone
+from django.db import connections
 from band.models import BandMember
 from datetime import date
 
@@ -45,6 +46,8 @@ def lambda_handler(event, context):
         # )
     else:
         print('No birthdays today.')
+
+    connections.close_all()
 
     return {
         'statusCode': 200,
