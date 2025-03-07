@@ -154,3 +154,12 @@ if not DEBUG:
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+EMAIL_BACKEND = "django_ses.SESBackend"
+EMAIL_HOST_USER = get_env_var('EMAIL_SENDER_ADDRESS', required=False)
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+AWS_ACCESS_KEY_ID = get_env_var('SES_ACCESS_KEY', required=False)
+AWS_SECRET_ACCESS_KEY = get_env_var('SES_SECRET_KEY', required=False)
+AWS_SES_REGION_NAME = get_env_var('SES_REGION', required=False)
+AWS_SES_REGION_ENDPOINT = f"email.{AWS_SES_REGION_NAME}.amazonaws.com"
