@@ -50,8 +50,8 @@ def lambda_handler(event, context):
     connections.close_all()
 
     return {
-        'statusCode': 200,
-        'body': json.dumps(today_birthdays)
+        "statusCode": 200,
+        "body": "Success"
     }
 
 
