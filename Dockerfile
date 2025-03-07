@@ -18,7 +18,7 @@ RUN apt-get update && \
 # Copy and install dependencies first (better caching)
 COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --no-root --without=dev
+    poetry install --no-root --with=site,lambda
 
 # Copy application source code
 COPY --chown=root:root ${SOURCE_DIRECTORY}/ ./
@@ -26,8 +26,6 @@ COPY --chown=root:root ${SOURCE_DIRECTORY}/ ./
 # Set up environment variables for virtualenv
 ENV VIRTUAL_ENV=${APP_HOME}/.venv \
     PATH=${APP_HOME}/.venv/bin:$PATH
-
-RUN pip install awslambdaric
 
 # Expose port
 EXPOSE 8000
