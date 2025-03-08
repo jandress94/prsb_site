@@ -52,30 +52,34 @@ jobs:
           IMAGE_TAG=$(git rev-parse --short HEAD)
           docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
           docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Push Docker image to ECR
         run: |
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
 
-#      - name: Package application
-#        run: |
-#          ZIP_FILE="deploy-${{ github.run_id }}.zip"
-#          zip -r $ZIP_FILE prsb Dockerfile poetry.lock pyproject.toml
-#          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
-#
-#      - name: Upload to Elastic Beanstalk
-#        env:
-#          APPLICATION_NAME: Phinney Ridge Steel Band Site
-#          ENVIRONMENT_NAME: prsb-site-dev2
-#          S3_BUCKET: elasticbeanstalk-us-west-2-905418288995
-#        run: |
-#          aws s3 cp $ZIP_FILE s3://$S3_BUCKET/$ZIP_FILE
-#          aws elasticbeanstalk create-application-version \
-#            --application-name "$APPLICATION_NAME" \
-#            --version-label "deploy-${{ github.run_id }}" \
-#            --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
-#          aws elasticbeanstalk update-environment \
-#            --application-name "$APPLICATION_NAME" \
-#            --environment-name $ENVIRONMENT_NAME \
-#            --version-label "deploy-${{ github.run_id }}"
+      - name: Package Dockerrun
+        run: |
+          IMAGE_TAG=$(git rev-parse --short HEAD)
+          ZIP_FILE="deploy-$IMAGE_TAG.zip"
+          zip -r $ZIP_FILE Dockerrun.aws.json
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+
+      - name: Upload to Elastic Beanstalk
+        env:
+          APPLICATION_NAME: Phinney Ridge Steel Band Site
+          ENVIRONMENT_NAME: prsb-site-dev2
+          S3_BUCKET: elasticbeanstalk-us-west-2-905418288995
+        run: |
+          IMAGE_TAG=$(git rev-parse --short HEAD)
+          aws s3 cp $ZIP_FILE s3://$S3_BUCKET/$ZIP_FILE
+          aws elasticbeanstalk create-application-version \
+            --application-name "$APPLICATION_NAME" \
+            --version-label "deploy-$IMAGE_TAG" \
+            --source-bundle S3Bucket=$S3_BUCKET,S3Key=$ZIP_FILE
+          aws elasticbeanstalk update-environment \
+            --application-name "$APPLICATION_NAME" \
+            --environment-name $ENVIRONMENT_NAME \
+            --version-label "deploy-$IMAGE_TAG"
