@@ -83,3 +83,10 @@ jobs:
             --application-name "$APPLICATION_NAME" \
             --environment-name $ENVIRONMENT_NAME \
             --version-label "deploy-$IMAGE_TAG"
+
+      - name: Update Lambda Function
+        run: |
+          aws lambda update-function-code \
+            --function-name birthday-checker-2 \
+            --image-uri ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
+
