@@ -12,6 +12,7 @@ from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views import generic
 from django.views.generic import FormView
+from tinymce.models import HTMLField
 
 from scripts.gig_part_assignment import get_gig_part_assignments, GigPartAssignment
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
@@ -254,6 +255,34 @@ class GigListView(generic.ListView):
         return context
 
 
+class GigForm(forms.ModelForm):
+    class Meta:
+        model = Gig
+        fields = ['name',
+                  'start_datetime',
+                  'end_datetime',
+                  'address',
+                  'notes']
+
+    # Override the widget for the DateTimeField
+    start_datetime = forms.DateTimeField(
+        widget=forms.DateTimeInput(attrs={'type': 'datetime-local'})
+    )
+    end_datetime = forms.DateTimeField(
+        widget=forms.DateTimeInput(attrs={'type': 'datetime-local'})
+    )
+    notes = HTMLField()
+
+
+class GigCreateView(generic.CreateView):
+    model = Gig
+    form_class = GigForm
+    template_name_suffix = '_create_form'
+
+    def get_success_url(self):
+        return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
+
+
 class GigDetailView(generic.DetailView):
     model = Gig
 
@@ -288,6 +317,15 @@ class GigDetailView(generic.DetailView):
         ).order_by('user__first_name', 'user__last_name')
 
         return context
+
+
+class GigUpdateView(generic.UpdateView):
+    model = Gig
+    form_class = GigForm
+    template_name_suffix = '_update_form'
+
+    def get_success_url(self):
+        return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
 
 
 class GigSetlistEntryForm(forms.ModelForm):

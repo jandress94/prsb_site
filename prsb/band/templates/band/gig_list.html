@@ -6,6 +6,8 @@
 {% block content %}
     <h2>Gigs</h2>
 
+    <a href={% url 'band:gig_create' %}>New Gig</a>
+
     <h3>Upcoming Gigs</h3>
     <ul>
         {% for gig in upcoming_gigs %}
