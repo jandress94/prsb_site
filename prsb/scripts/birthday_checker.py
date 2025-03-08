@@ -25,7 +25,6 @@ def lambda_handler(event, context):
     d = timezone.localtime(timezone.now()).date()
 
     print("Today's date:", d)
-    print('testing')
 
     today_birthdays = [m.user.get_full_name() for m in BandMember.objects.filter(birthday=d)]
 
