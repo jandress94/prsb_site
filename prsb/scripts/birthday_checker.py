@@ -34,7 +34,7 @@ def lambda_handler(event, context):
         print(birthday_list)
 
         send_mail(
-            "PRSB Birthdays Today!",
+            f"PRSB Birthdays {d}!",
             f"The following band members have their birthday today!\n\n{birthday_list}",
             DEFAULT_FROM_EMAIL,
             BIRTHDAY_EMAIL_RECIPIENTS,
