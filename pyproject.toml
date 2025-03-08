@@ -31,6 +31,7 @@ optional = true
 [tool.poetry.group.lambda.dependencies]
 django-ses = "^4.4.0"
 awslambdaric = "^3.0.2"
+requests = "^2.32.3"
 
 
 [tool.poetry.group.dev]
