@@ -3,11 +3,8 @@
 #
 # email_test.py
 # Created: 3/7/25
-import json
 
 import django
-
-from prsb.settings import DEFAULT_FROM_EMAIL
 
 django.setup()
 
@@ -15,9 +12,8 @@ django.setup()
 from django.core.mail import send_mail
 from django.utils import timezone
 from django.db import connections
+from prsb.settings import DEFAULT_FROM_EMAIL
 from band.models import BandMember
-from datetime import date
-import requests
 
 
 BIRTHDAY_EMAIL_RECIPIENTS = [
@@ -26,15 +22,9 @@ BIRTHDAY_EMAIL_RECIPIENTS = [
 
 
 def lambda_handler(event, context):
-    # d = timezone.localtime(timezone.now()).date()
-    d = date(year=1994, month=9, day=3)
+    d = timezone.localtime(timezone.now()).date()
 
     print("Today's date:", d)
-
-    response = requests.get("https://www.google.com")
-    print(response.status_code)
-    response = requests.get("https://email.us-west-2.amazonaws.com")
-    print(response.status_code)
 
     today_birthdays = [m.user.get_full_name() for m in BandMember.objects.filter(birthday=d)]
 
