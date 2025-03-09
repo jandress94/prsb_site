@@ -6,6 +6,39 @@
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
+
+        <h3>Gig Instruments</h3>
+        {% if instrument_formset.non_form_errors %}
+            <div class="error">
+              <strong>Errors:</strong>
+              <ul>
+                {% for error in instrument_formset.non_form_errors %}
+                  <li>{{ error }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+        {% endif %}
+        {{ instrument_formset.management_form }}
+        <table>
+            <thead>
+                <tr>
+                    <th>Instrument</th>
+                    <th>Quantity</th>
+                    <th>Delete?</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for form in instrument_formset %}
+                    <tr>
+                        {{ form.id }}  {# Hidden ID field to track existing objects #}
+                        <td>{{ form.instrument }}</td>
+                        <td>{{ form.gig_quantity }}</td>
+                        <td>{{ form.DELETE }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
         <input type="submit" value="Update">
     </form>
     <a href={% url 'band:gig_detail' gig.id %}>Cancel</a>

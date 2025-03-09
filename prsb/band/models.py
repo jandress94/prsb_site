@@ -163,7 +163,7 @@ class GigInstrument(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['gig', 'instrument'], name='unique GigInstrument')
+            models.UniqueConstraint(fields=['gig', 'instrument'], name='unique GigInstrument', violation_error_message='The instrument is already assigned to this gig.')
         ]
         ordering = ["instrument__order"]
 

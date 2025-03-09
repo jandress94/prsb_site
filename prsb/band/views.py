@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.db.models import Exists, OuterRef, Subquery
 from django import forms
 from django.db import connection
-from django.forms import modelformset_factory, formset_factory
+from django.forms import modelformset_factory, formset_factory, inlineformset_factory
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
@@ -272,10 +272,44 @@ class GigForm(forms.ModelForm):
     notes = HTMLField()
 
 
+class GigInstrumentForm(forms.ModelForm):
+    class Meta:
+        model = GigInstrument
+        fields = ['instrument', 'gig_quantity']
+
+GigInstrumentFormSet = inlineformset_factory(
+    Gig,
+    GigInstrument,  # Related model
+    form=GigInstrumentForm,
+    extra=1,
+    can_delete=True
+)
+
+
 class GigCreateView(generic.CreateView):
     model = Gig
     form_class = GigForm
     template_name_suffix = '_create_form'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context['instrument_formset'] = GigInstrumentFormSet(self.request.POST)
+        else:
+            context['instrument_formset'] = GigInstrumentFormSet()
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        instrument_formset = context['instrument_formset']
+
+        if form.is_valid() and instrument_formset.is_valid():
+            self.object = form.save()  # Save the Gig instance
+            instrument_formset.instance = self.object  # Link the formset to this Gig
+            instrument_formset.save()  # Save the related GigInstrument instances
+            return redirect(self.get_success_url())
+
+        return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
@@ -321,6 +355,26 @@ class GigUpdateView(generic.UpdateView):
     model = Gig
     form_class = GigForm
     template_name_suffix = '_update_form'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context['instrument_formset'] = GigInstrumentFormSet(self.request.POST, instance=self.object)
+        else:
+            context['instrument_formset'] = GigInstrumentFormSet(instance=self.object)
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        instrument_formset = context['instrument_formset']
+
+        if form.is_valid() and instrument_formset.is_valid():
+            self.object = form.save()  # Save the Gig instance
+            instrument_formset.instance = self.object  # Link the formset to this Gig
+            instrument_formset.save()  # Save the related GigInstrument instances
+            return redirect(self.get_success_url())
+
+        return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
