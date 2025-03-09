@@ -177,8 +177,8 @@ class GigAttendance(models.Model):
     MAYBE_AVAILABLE = "maybe_available"
     AVAILABILITY_CHOICES = {
         AVAILABLE: "Available",
-        UNAVAILABLE: "Unavailable",
-        MAYBE_AVAILABLE: "Maybe Available"
+        MAYBE_AVAILABLE: "Maybe Available",
+        UNAVAILABLE: "Unavailable"
     }
 
     gig = models.ForeignKey(Gig, on_delete=models.CASCADE)

@@ -12,13 +12,14 @@
     <p>{{ gig.notes|safe }}</p>
 
     <h2>Band Member Availability</h2>
+    <a href={% url 'band:gig_availability_update' gig.id %}>Edit Member Availability</a>
     <table>
         <thead>
             <tr>
-                <th>Available</th>
-                <th>Maybe Available</th>
-                <th>Not Available</th>
-                <th>Missing Availability</th>
+                <th>Available ({{ available_members | length }})</th>
+                <th>Maybe Available ({{ maybe_available_members | length }})</th>
+                <th>Not Available ({{ unavailable_members | length }})</th>
+                <th>Missing Availability ({{ missing_members | length }})</th>
             </tr>
         </thead>
         <tbody>

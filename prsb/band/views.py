@@ -1,17 +1,15 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef, Subquery
-from django import forms, views
+from django import forms
 from django.db import connection
-from django.forms import modelformset_factory
+from django.forms import modelformset_factory, formset_factory
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse
 from django.utils import timezone
 from django.views import generic
-from django.views.generic import FormView
 from tinymce.models import HTMLField
 
 from scripts.gig_part_assignment import get_gig_part_assignments, GigPartAssignment
@@ -328,6 +326,83 @@ class GigUpdateView(generic.UpdateView):
         return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
 
 
+class GigAvailabilityForm(forms.Form):
+    attendance_id = forms.IntegerField(widget=forms.HiddenInput(), required=False)
+    member_id = forms.IntegerField(widget=forms.HiddenInput())
+    status = forms.ChoiceField(choices=[(None, '------')] + list(GigAttendance.AVAILABILITY_CHOICES.items()), required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        print(args, kwargs)
+
+        if 'initial' not in kwargs:
+            return
+
+        member = kwargs['initial']['member']
+
+        self.fields['member_id'].initial = member.user_id
+        self.member_name = member.user.get_full_name()
+
+GigAvailabilityFormSet = formset_factory(GigAvailabilityForm, extra=0)
+
+
+class GigAvailabilityUpdateView(generic.View):
+    template_name = 'band/gig_availability_update.html'
+
+    def get(self, request, gig_id):
+        gig = get_object_or_404(Gig, id=gig_id)
+
+        existing_gig_attendance = GigAttendance.objects.filter(gig=gig)
+        initial_data = [
+            {
+                'attendance_id': ga.id,
+                'member': ga.member,
+                'status': ga.status
+            }
+            for ga in existing_gig_attendance
+        ]
+
+        missing_members = BandMember.objects.filter(~Exists(GigAttendance.objects.filter(gig=gig, member=OuterRef('pk'))), user__is_active=True)
+        initial_data += [
+            {
+                'attendance_id': None,
+                'member': member,
+                'status': None
+            }
+            for member in missing_members
+        ]
+
+        initial_data = sorted(initial_data, key=lambda x: x['member'].user.get_full_name())
+
+        formset = GigAvailabilityFormSet(initial=initial_data)
+        return render(request, self.template_name, {'gig': gig, 'formset': formset})
+
+    def post(self, request, gig_id):
+        gig = get_object_or_404(Gig, id=gig_id)
+        formset = GigAvailabilityFormSet(request.POST)
+
+        if formset.is_valid():
+            new_gig_attendance = []
+            modified_gig_attendance = []
+            deleted_gig_attendance = []
+            for form in formset:
+                if form.cleaned_data['attendance_id'] is not None:
+                    if form.cleaned_data['status'] == '':
+                        deleted_gig_attendance.append(form)
+                    else:   # TODO: only things that have actually changed
+                        modified_gig_attendance.append(form)
+                elif form.cleaned_data['status'] != '':
+                    new_gig_attendance.append(form)
+
+            GigAttendance.objects.bulk_create([GigAttendance(gig=gig, member_id=form.cleaned_data['member_id'], status=form.cleaned_data['status']) for form in new_gig_attendance])
+            GigAttendance.objects.bulk_update([GigAttendance(id=form.cleaned_data['attendance_id'], status=form.cleaned_data['status']) for form in modified_gig_attendance], ['status'])
+            GigAttendance.objects.filter(id__in=[form.cleaned_data['attendance_id'] for form in deleted_gig_attendance]).delete()
+
+            return redirect('band:gig_detail', pk=gig.id)
+        else:
+            return render(request, self.template_name, {'formset': formset, 'gig': gig})
+
+
 class GigSetlistEntryForm(forms.ModelForm):
     class Meta:
         model = GigSetlistEntry
@@ -370,44 +445,6 @@ class GigSetlistUpdateView(generic.View):
             return redirect('band:gig_detail', pk=gig.id)
 
         return render(request, self.template_name, {'formset': formset, 'gig': gig})
-
-
-# class GigSetlistUpdateView(generic.FormView):
-#     template_name = 'band/gig_setlist_update.html'
-#     form_class = GigSetlistEntryFormSet
-#
-#     def dispatch(self, request, *args, **kwargs):
-#         # Get the Gig object to use in the formset
-#         self.gig = get_object_or_404(Gig, id=self.kwargs['gig_id'])
-#         return super().dispatch(request, *args, **kwargs)
-#
-#     def get_context_data(self, **kwargs):
-#         # Pass the gig to the template context explicitly
-#         context = super().get_context_data(**kwargs)
-#         context['gig'] = self.gig
-#         context['formset'] = GigSetlistEntryFormSet(queryset=GigSetlistEntry.objects.filter(gig=self.gig))
-#         return context
-#
-#     def form_valid(self, formset):
-#         """Called when the formset is valid."""
-#         entries = formset.save(commit=False)
-#         for entry in entries:
-#             entry.gig = self.gig  # Associate entries with the gig
-#             entry.save()
-#
-#         # Delete entries marked for deletion
-#         for obj in formset.deleted_objects:
-#             obj.delete()
-#
-#         return redirect(self.get_success_url())
-#
-#     def form_invalid(self, formset):
-#         context = self.get_context_data(formset=formset)
-#         return self.render_to_response(context)  # Display the form again with errors
-#
-#     def get_success_url(self):
-#         # Redirect to the gig detail page
-#         return reverse_lazy('band:gig_detail', kwargs={'pk': self.gig.id})
 
 
 class GigSetlistAddSongView(generic.View):

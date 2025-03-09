@@ -1,0 +1,29 @@
+{% extends "band/base.html" %}
+
+{% block title %}{{ gig.name }} Member Availability | PRSB{% endblock %}
+{% block content %}
+    <h1>{{ gig.name }} Band Member Availability</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        <table>
+            <thead>
+                <th>Member</th>
+                <th>Availability</th>
+            </thead>
+            <tbody>
+                {% for form in formset %}
+                    <tr>
+                        {{ form.attendance_id }}
+                        {{ form.member_id }}
+                        <td>{{ form.member_name }}</td>
+                        <td>{{ form.status }}</td>
+                    </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <input type="submit" value="Update">
+    </form>
+    <a href={% url 'band:gig_detail' gig.id %}>Cancel</a>
+{% endblock %}
