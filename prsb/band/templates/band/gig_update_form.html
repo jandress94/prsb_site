@@ -1,7 +1,13 @@
 {% extends "band/base.html" %}
 {% load static %}
 
-{% block title %}{{ gig.name }} | Update | PRSB{% endblock %}
+{% block title %}
+    {% if is_create %}
+        New Gig | PRSB
+    {% else %}
+        {{ gig.name }} | Update | PRSB
+    {% endif %}
+{% endblock %}
 
 {% block content %}
     <form method="post">{% csrf_token %}
@@ -18,35 +24,115 @@
               </ul>
             </div>
         {% endif %}
+
+        <button type="button" id="add-entry">➕ Add Instrument</button>
         {{ instrument_formset.management_form }}
-        <table>
+
+        {% for entry_form in instrument_formset %}
+            {% if entry_form.errors %}
+                <div class="error">
+                    {% for field, errors in entry_form.errors.items %}
+                        <ul class="errorlist">
+                            {% for error in errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endfor %}
+        <table id="instrument-table">
             <thead>
                 <tr>
                     <th>Instrument</th>
                     <th>Quantity</th>
-                    <th>Delete?</th>
+                    <th>Remove</th>
                 </tr>
             </thead>
             <tbody>
                 {% for form in instrument_formset %}
-                    <tr>
-                        {{ form.id }}  {# Hidden ID field to track existing objects #}
+                    <tr class="instrument-row">
+                        {{ form.id }}
                         <td>{{ form.instrument }}</td>
                         <td>{{ form.gig_quantity }}</td>
-                        <td>{{ form.DELETE }}</td>
+                        <td><button type="button" class="remove-entry">❌</button></td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
 
-        <input type="submit" value="Update">
+        {% if is_create %}
+            <input type="submit" value="Create Gig">
+        {% else %}
+            <input type="submit" value="Update Gig">
+        {% endif %}
     </form>
-    <a href={% url 'band:gig_detail' gig.id %}>Cancel</a>
+
+    {% if is_create %}
+        <a href={% url 'band:gig_list' %}>Cancel</a>
+    {% else %}
+        <a href={% url 'band:gig_detail' gig.id %}>Cancel</a>
+    {% endif %}
+
+    <div id="empty-form" style="display: none;">
+        <table>
+            <tbody>
+                <tr class="instrument-row">
+                    {{ instrument_formset.empty_form.management_form }}
+                    {{ instrument_formset.empty_form.id }}
+                    <td>{{ instrument_formset.empty_form.instrument }}</td>
+                    <td>{{ instrument_formset.empty_form.gig_quantity }}</td>
+                    <td><button type="button" class="remove-entry">❌</button></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 {% endblock %}
 
 {% block extra_js %}
     <script src={% static 'tinymce/tinymce.min.js' %}></script>
     <script>
         tinymce.init({selector: '#id_notes'});
+    </script>
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const tableBody = document.querySelector("#instrument-table tbody"); // Make sure the table body exists
+
+        const addEntryButton = document.querySelector("#add-entry");
+        const emptyFormTemplate = document.querySelector("#empty-form").innerHTML;
+        const totalFormsInput = document.querySelector("#id_giginstrument_set-TOTAL_FORMS");
+        const initialFormsInput = document.querySelector("#id_giginstrument_set-INITIAL_FORMS");
+
+        function updateFormIndices() {
+            let rows = tableBody.querySelectorAll(".instrument-row");
+            rows.forEach((row, index) => {
+                row.querySelectorAll("[name]").forEach(input => {
+                    input.name = input.name.replace(/giginstrument_set-\d+-/, `giginstrument_set-${index}-`);
+                    input.id = input.id.replace(/giginstrument_set-\d+-/, `giginstrument_set-${index}-`);
+                });
+            });
+            totalFormsInput.value = rows.length;  // Update form count
+        }
+
+        addEntryButton.addEventListener("click", function () {
+            let newRow = document.createElement("tr");
+            newRow.innerHTML = emptyFormTemplate.replace(/__prefix__/g, totalFormsInput.value);
+            newRow.classList.add("instrument-row");
+            tableBody.appendChild(newRow);  // Append new row to table body
+            updateFormIndices();
+        });
+
+        tableBody.addEventListener("click", function (event) {
+            if (event.target.classList.contains("remove-entry")) {
+                let removeRow = event.target.closest("tr");
+                let id_input = removeRow.querySelector("input[id^='id_giginstrument_set-']");
+                if (id_input && id_input.value) {
+                    initialFormsInput.value -= 1;
+                }
+                removeRow.remove();
+                updateFormIndices();
+            }
+        });
+    });
     </script>
 {% endblock %}

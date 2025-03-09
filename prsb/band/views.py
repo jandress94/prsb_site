@@ -281,18 +281,19 @@ GigInstrumentFormSet = inlineformset_factory(
     Gig,
     GigInstrument,  # Related model
     form=GigInstrumentForm,
-    extra=1,
-    can_delete=True
+    extra=0
 )
 
 
 class GigCreateView(generic.CreateView):
     model = Gig
     form_class = GigForm
-    template_name_suffix = '_create_form'
+    template_name_suffix = '_update_form'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['is_create'] = True
+
         if self.request.POST:
             context['instrument_formset'] = GigInstrumentFormSet(self.request.POST)
         else:
@@ -358,6 +359,8 @@ class GigUpdateView(generic.UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['is_create'] = False
+
         if self.request.POST:
             context['instrument_formset'] = GigInstrumentFormSet(self.request.POST, instance=self.object)
         else:
@@ -371,6 +374,7 @@ class GigUpdateView(generic.UpdateView):
         if form.is_valid() and instrument_formset.is_valid():
             self.object = form.save()  # Save the Gig instance
             instrument_formset.instance = self.object  # Link the formset to this Gig
+            GigInstrument.objects.filter(gig=self.object).exclude(id__in={form.instance.id for form in instrument_formset.forms}).delete()
             instrument_formset.save()  # Save the related GigInstrument instances
             return redirect(self.get_success_url())
 
