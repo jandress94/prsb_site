@@ -611,3 +611,8 @@ def health_check(request):
         return JsonResponse({"status": "ok", "db": "connected"})
     except Exception:
         return JsonResponse({"status": "error", "db": "unreachable"}, status=500)
+
+
+def get_instruments(request):
+    instruments = list(Instrument.objects.all().order_by('order').values('id', 'name', 'quantity'))
+    return JsonResponse({"instruments": instruments})

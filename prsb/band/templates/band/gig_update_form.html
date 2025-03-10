@@ -26,6 +26,7 @@
         {% endif %}
 
         <button type="button" id="add-entry">➕ Add Instrument</button>
+        <button type="button" id="add-all-instruments">Add All Instruments</button>
         {{ instrument_formset.management_form }}
 
         {% for entry_form in instrument_formset %}
@@ -99,6 +100,7 @@
         const tableBody = document.querySelector("#instrument-table tbody"); // Make sure the table body exists
 
         const addEntryButton = document.querySelector("#add-entry");
+        const addAllInstrumentsButton = document.querySelector("#add-all-instruments");
         const emptyFormTemplate = document.querySelector("#empty-form").innerHTML;
         const totalFormsInput = document.querySelector("#id_giginstrument_set-TOTAL_FORMS");
         const initialFormsInput = document.querySelector("#id_giginstrument_set-INITIAL_FORMS");
@@ -132,6 +134,29 @@
                 removeRow.remove();
                 updateFormIndices();
             }
+        });
+
+        addAllInstrumentsButton.addEventListener("click", function () {
+            fetch('{% url 'band:api_instruments' %}').then(response => response.json()).then(data => {
+                tableBody.innerHTML = '';
+                initialFormsInput.value = 0;
+
+                data['instruments'].forEach(instrument => {
+                    let newRow = document.createElement("tr");
+                    newRow.innerHTML = emptyFormTemplate.replace(/__prefix__/g, totalFormsInput.value);
+                    newRow.classList.add("instrument-row");
+
+                    let instrument_input = newRow.querySelector("select[id$='instrument']");
+                    instrument_input.value = instrument['id'];
+
+                    let quantity_input = newRow.querySelector("input[id$='gig_quantity']");
+                    quantity_input.value = instrument['quantity'];
+
+                    tableBody.appendChild(newRow);  // Append new row to table body
+                });
+
+                updateFormIndices();
+            });
         });
     });
     </script>
