@@ -4,7 +4,7 @@
 
 {% block content %}
     <h2>Songs</h2>
-{#    <a href={% url 'band:song_create' %}>New Song</a>#}
+    <a href={% url 'band:song_create' %}>New Song</a>
     <ul>
         {% for song in object_list %}
             <li><a href={% url 'band:song_detail' song.id %}>{{ song.title }}</a></li>
