@@ -277,6 +277,11 @@ class GigInstrumentForm(forms.ModelForm):
         model = GigInstrument
         fields = ['instrument', 'gig_quantity']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['instrument'].disabled = True
+
 GigInstrumentFormSet = inlineformset_factory(
     Gig,
     GigInstrument,  # Related model
