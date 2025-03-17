@@ -211,3 +211,14 @@ class GigPartAssignmentOverride(models.Model):
                                                     gig_instrument__gig=self.gig_instrument.gig,
                                                     song_part__song=self.song_part.song).exclude(pk=self.pk).exists():
             raise ValidationError("A band member can only have one override per song per gig")
+
+
+class BandSpecialDate(models.Model):
+    date = YearlessDateField()
+    description = models.TextField()
+
+    def __str__(self):
+        return f'{self.date}: {self.description}'
+
+    class Meta:
+        ordering = ['date']

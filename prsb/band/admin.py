@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 
 from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument, \
-    GigPartAssignmentOverride, GigSetlistEntry
+    GigPartAssignmentOverride, GigSetlistEntry, BandSpecialDate
 
 
 class SongPartInline(admin.TabularInline):
@@ -169,3 +169,6 @@ class GigPartAssignmentOverrideAdmin(admin.ModelAdmin):
     list_filter = [GigFilter, MemberUserFilter, SongFilter]
 
 admin.site.register(GigPartAssignmentOverride, GigPartAssignmentOverrideAdmin)
+
+
+admin.site.register(BandSpecialDate)

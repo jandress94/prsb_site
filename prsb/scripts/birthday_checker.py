@@ -13,8 +13,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from django.db import connections
 from prsb.settings import DEFAULT_FROM_EMAIL
-from band.models import BandMember
-
+from band.models import BandMember, BandSpecialDate
 
 BIRTHDAY_EMAIL_RECIPIENTS = [
     "jim.andress+prsb@gmail.com"
@@ -26,22 +25,22 @@ def lambda_handler(event, context):
 
     print("Today's date:", d)
 
-    today_birthdays = [m.user.get_full_name() for m in BandMember.objects.filter(birthday=d)]
+    results = [f"{m.user.get_full_name()}'s Birthday" for m in BandMember.objects.filter(birthday=d)]
+    results += [bsd.description for bsd in BandSpecialDate.objects.filter(date=d)]
 
-    if len(today_birthdays) > 0:
-        birthday_list = '\n'.join(today_birthdays)
-        print(f"Birthdays today!")
-        print(birthday_list)
+    if len(results) > 0:
+        result_formatted = '\n'.join(results)
+        print(result_formatted)
 
         send_mail(
-            f"PRSB Birthdays {d}!",
-            f"The following band members have their birthday today!\n\n{birthday_list}",
+            f"PRSB Special Date {d}!",
+            f"Today is a special date!\n\n{result_formatted}",
             DEFAULT_FROM_EMAIL,
             BIRTHDAY_EMAIL_RECIPIENTS,
             fail_silently=False,
         )
     else:
-        print('No birthdays today.')
+        print('Not a special date today.')
 
     connections.close_all()
 
