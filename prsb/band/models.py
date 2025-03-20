@@ -71,6 +71,7 @@ def update_profile_signal(sender, instance, created, **kwargs):
 class Instrument(OrderedModel):
     name = models.CharField(max_length=256)
     quantity = models.PositiveSmallIntegerField(default=1)
+    include_in_gig_song_count = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name

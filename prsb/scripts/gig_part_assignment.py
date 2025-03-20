@@ -226,7 +226,7 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
             # invalid constraints
             continue
 
-        member_song_counts.update([pa.member for pa in part_assignments])
+        member_song_counts.update([pa.member for pa in part_assignments if pa.instrument.include_in_gig_song_count])
 
         if is_in_setlist:
             gig_part_assignments_setlist.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
