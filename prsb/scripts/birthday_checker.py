@@ -33,14 +33,14 @@ def lambda_handler(event, context):
         print(result_formatted)
 
         send_mail(
-            f"PRSB Special Date {d}!",
-            f"Today is a special date!\n\n{result_formatted}",
+            f"PRSB Special Day {d}!",
+            f"Today is a special day!\n\n{result_formatted}",
             DEFAULT_FROM_EMAIL,
             BIRTHDAY_EMAIL_RECIPIENTS,
             fail_silently=False,
         )
     else:
-        print('Not a special date today.')
+        print('Not a special day today.')
 
     connections.close_all()
 
