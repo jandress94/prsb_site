@@ -163,7 +163,7 @@
     <h2>Options and Settings</h2>
     <div>
         <p>
-            <a href={% url 'band:gig_part_assignment_print' gig.id %}>Print Setlist Part Assignments</a>
+            <a href="{% url 'band:gig_part_assignment_print' gig.id %}?order=setlist">Print Setlist Part Assignments</a>
         </p>
         <p>
             <label for="hide-unutilized">Hide Unutilized:</label>
