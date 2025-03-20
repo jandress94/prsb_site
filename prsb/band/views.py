@@ -536,10 +536,20 @@ class GigPartAssignmentsDetailView(generic.TemplateView):
         return context
 
 
+class GigInstrumentChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj: GigInstrument):
+        return obj.instrument
+
+
 class GigPartAssignmentOverrideForm(forms.ModelForm):
     class Meta:
         model = GigPartAssignmentOverride
         fields = ['member', 'song_part', 'gig_instrument', 'performance_readiness']
+
+    gig_instrument = GigInstrumentChoiceField(
+        queryset=GigInstrument.objects.all(),   # will be overridden below when we know which gig
+        label='Instrument'
+    )
 
     def __init__(self, *args, **kwargs):
         self.gig_id = kwargs.pop('gig_id')
