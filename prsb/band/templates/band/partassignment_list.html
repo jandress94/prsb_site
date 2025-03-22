@@ -2,6 +2,11 @@
 
 {% block title %}Part Assignments | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > Part Assignments
+{% endblock %}
+
 {% block content %}
     <h2>Part Assignments</h2>
     <table class="sortable">

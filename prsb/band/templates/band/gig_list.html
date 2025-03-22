@@ -3,6 +3,11 @@
 
 {% block title %}Gigs | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > Gigs
+{% endblock %}
+
 {% block content %}
     <h2>Gigs</h2>
 
@@ -21,6 +26,4 @@
             <li><a href={% url 'band:gig_detail' gig.id %}>{{ gig }} ({{ gig.start_datetime|localtime|date:"Y-m-d" }})</a></li>
         {% endfor %}
     </ul>
-
-    <a href={% url 'band:index' %}>Back to Main Menu</a>
 {% endblock %}

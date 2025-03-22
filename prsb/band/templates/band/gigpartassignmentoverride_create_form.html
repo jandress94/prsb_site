@@ -2,10 +2,17 @@
 
 {% block title %}New Gig Part Assignment Override | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:gig_list' %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' form.gig_id %}>{{ form.gig_name }}</a>
+    > <a href={% url 'band:gig_part_assignments_detail' form.gig_id %}>Part Assignments</a>
+    > New Gig Part Assignment Override
+{% endblock %}
+
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
         <input type="submit" value="Create">
     </form>
-    <a href={% url 'band:gig_part_assignments_detail' form.gig_id %}>Cancel</a>
 {% endblock %}

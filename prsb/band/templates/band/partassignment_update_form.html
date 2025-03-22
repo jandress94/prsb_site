@@ -2,10 +2,21 @@
 
 {% block title %}{{ partassignment }} | Update | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    {% if form.member_name %}
+        > <a href={% url 'band:member_list' %}>Band Members</a>
+        > <a href={% url 'band:member_detail' form.member_id %}>{{ form.member_name }}</a>
+    {% else %}
+        > <a href={% url 'band:song_list' %}>Songs</a>
+        > <a href={% url 'band:song_detail' form.song_id %}>{{ form.song_name }}</a>
+    {% endif %}
+    > Update Part Assignment
+{% endblock %}
+
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
         <input type="submit" value="Update">
     </form>
-{#    <a href={% url 'band:gig_detail' form.gig_id %}>Cancel</a>#}
 {% endblock %}

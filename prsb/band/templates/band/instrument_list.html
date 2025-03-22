@@ -2,6 +2,11 @@
 
 {% block title %}Instruments | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > Instruments
+{% endblock %}
+
 {% block content %}
     <h2>Instruments</h2>
     <ul>
@@ -9,6 +14,4 @@
             <li>{{ instrument.name }} (x{{ instrument.quantity }})</li>
         {% endfor %}
     </ul>
-
-    <a href={% url 'band:index' %}>Back to Main Menu</a>
 {% endblock %}

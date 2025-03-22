@@ -1,6 +1,14 @@
 {% extends "band/base.html" %}
 
 {% block title %}{{ gig.name }} Setlist | PRSB{% endblock %}
+
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:gig_list' %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a>
+    > Update Setlist
+{% endblock %}
+
 {% block content %}
   <h2>Edit Setlist for {{ gig.name }}</h2>
 

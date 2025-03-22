@@ -62,8 +62,11 @@ header {
 }
 
 nav {
+    padding: 20px;
+    background-color: #0D283C; /* Dark blue */
+    color: #f5ebd6; /* Cream text */
     margin: 10px 0;
-    text-align: center;
+    /*text-align: center;*/
 }
 
 nav a {

@@ -6,6 +6,15 @@
 {% endblock %}
 
 {% block title %}{{ gig.name }} | Part Assignments | PRSB{% endblock %}
+
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:gig_list' %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a>
+    > <a href={% url 'band:gig_part_assignments_detail' gig.id %}>Part Assignments</a>
+    > Print
+{% endblock %}
+
 {% block content %}
     <h1>{{gig.name}}</h1>
 
@@ -43,6 +52,4 @@
             </table>
         </div>
     {% endfor %}
-
-    <a href={% url 'band:gig_part_assignments_detail' gig.id %}>Back to {{ gig.name }} Part Assignments</a>
 {% endblock %}

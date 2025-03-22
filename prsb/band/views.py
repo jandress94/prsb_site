@@ -178,11 +178,18 @@ class PartAssignmentForm(forms.ModelForm):
         if member_id is not None:
             self.fields['member'].initial = BandMember.objects.get(pk=member_id)
             self.fields['member'].queryset = BandMember.objects.filter(pk=member_id)
+            self.fields['member'].disabled = True
+
+            self.member_id = member_id
+            self.member_name = self.fields['member'].initial.user.get_full_name()
         else:
             self.fields['member'].queryset = BandMember.objects.filter(user__is_active=True)
 
         if song_id is not None:
             self.fields['song_part'].queryset = SongPart.objects.filter(song_id=song_id).order_by('song', '_order')
+
+            self.song_id = song_id
+            self.song_name = Song.objects.get(pk=song_id).title
         else:
             self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
 
@@ -553,6 +560,7 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.gig_id = kwargs.pop('gig_id')
+        self.gig_name = kwargs.pop('gig_name')
         super().__init__(*args, **kwargs)
 
         self.fields['member'].queryset = BandMember.objects.filter(Exists(GigAttendance.objects.filter(member=OuterRef("pk"),
@@ -571,6 +579,7 @@ class GigPartAssignmentOverrideCreateView(generic.CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['gig_id'] = self.kwargs['pk']
+        kwargs['gig_name'] = Gig.objects.get(id=self.kwargs['pk']).name
         return kwargs
 
     def get_success_url(self):

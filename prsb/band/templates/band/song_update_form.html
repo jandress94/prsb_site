@@ -2,10 +2,16 @@
 
 {% block title %}{{ song.title }} | Update | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:song_list' %}>Songs</a>
+    > <a href={% url 'band:song_detail' song.id %}>{{ song.title }}</a>
+    > Update
+{% endblock %}
+
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
         <input type="submit" value="Update">
     </form>
-    <a href={% url 'band:song_detail' song.id %}>Cancel</a>
 {% endblock %}

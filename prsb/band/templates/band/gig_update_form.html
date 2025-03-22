@@ -9,6 +9,17 @@
     {% endif %}
 {% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:gig_list' %}>Gigs</a>
+    {% if is_create %}
+        > Create New Gig
+    {% else %}
+        > <a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a>
+        > Update
+    {% endif %}
+{% endblock %}
+
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
@@ -68,12 +79,6 @@
             <input type="submit" value="Update Gig">
         {% endif %}
     </form>
-
-    {% if is_create %}
-        <a href={% url 'band:gig_list' %}>Cancel</a>
-    {% else %}
-        <a href={% url 'band:gig_detail' gig.id %}>Cancel</a>
-    {% endif %}
 
     <div id="empty-form" style="display: none;">
         <table>

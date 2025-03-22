@@ -2,6 +2,11 @@
 
 {% block title %}Songs | PRSB{% endblock %}
 
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > Songs
+{% endblock %}
+
 {% block content %}
     <h2>Songs</h2>
     <a href={% url 'band:song_create' %}>New Song</a>
@@ -10,6 +15,4 @@
             <li><a href={% url 'band:song_detail' song.id %}>{{ song.title }}</a></li>
         {% endfor %}
     </ul>
-
-    <a href={% url 'band:index' %}>Back to Main Menu</a>
 {% endblock %}
