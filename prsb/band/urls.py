@@ -32,6 +32,8 @@ urlpatterns = [
          views.SongPartAssignmentUpdateView.as_view(), name="song_part_assignment_update"),
 
     path("part-assignments/", views.PartAssignmentListView.as_view(), name="part_assignment_list"),
+    path("part-assignments/create/", views.PartAssignmentCreateView.as_view(), name="part_assignment_create"),
+    path("part-assignments/<int:pk>/update/", views.PartAssignmentUpdateView.as_view(), name="part_assignment_update"),
 
     path("gigs/", views.GigListView.as_view(), name="gig_list"),
     path("gigs/create/", views.GigCreateView.as_view(), name="gig_create"),

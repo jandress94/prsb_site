@@ -7,9 +7,11 @@
     {% if form.member_name %}
         > <a href={% url 'band:member_list' %}>Band Members</a>
         > <a href={% url 'band:member_detail' form.member_id %}>{{ form.member_name }}</a>
-    {% else %}
+    {% elif form.song_name %}
         > <a href={% url 'band:song_list' %}>Songs</a>
         > <a href={% url 'band:song_detail' form.song_id %}>{{ form.song_name }}</a>
+    {% else %}
+        > <a href={% url 'band:part_assignment_list' %}>Part Assignments</a>
     {% endif %}
     > New Part Assignment
 {% endblock %}

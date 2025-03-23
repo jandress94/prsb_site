@@ -151,19 +151,19 @@ def get_missing_person_songs():
 
 class PartAssignmentListView(generic.ListView):
     model = PartAssignment
-    ordering = ['song_part__song__title',
-                'song_part___order',
-                'instrument__name',
-                'member__user__first_name',
-                'member__user__last_name']
 
     def get_queryset(self):
-        return PartAssignment.objects.filter(member__user__is_active=True)
+        return PartAssignment.objects.filter(member__user__is_active=True).order_by('song_part__song__title',
+                                                                                    'song_part___order',
+                                                                                    'instrument__name',
+                                                                                    'member__user__first_name',
+                                                                                    'member__user__last_name')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['missing_person_songs'] = get_missing_person_songs()
         return context
+
 
 class PartAssignmentForm(forms.ModelForm):
     class Meta:
@@ -192,6 +192,21 @@ class PartAssignmentForm(forms.ModelForm):
             self.song_name = Song.objects.get(pk=song_id).title
         else:
             self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
+
+
+class PartAssignmentCreateView(generic.CreateView):
+    model = PartAssignment
+    form_class = PartAssignmentForm
+    template_name_suffix = '_create_form'
+
+    def get_success_url(self):
+        return reverse("band:part_assignment_list")
+
+
+class PartAssignmentUpdateView(generic.UpdateView):
+    model = PartAssignment
+    form_class = PartAssignmentForm
+    template_name_suffix = '_update_form'
 
 
 class MemberPartAssignmentCreateView(generic.CreateView):
