@@ -1,0 +1,37 @@
+<!-- band/profile_detail.html -->
+{% extends "band/base.html" %}
+
+{% block title %}My Profile | PRSB{% endblock %}
+
+{% block nav %}
+    <a href="{% url 'band:index' %}">Home</a>
+    > My Profile
+{% endblock %}
+
+{% block content %}
+    <h1>My Profile</h1>
+
+    <div>
+        <p><strong>Name:</strong> {{ bandmember }}</p>
+        <p><strong>Email:</strong> {{ bandmember.user.email }}</p>
+        <p><strong>Phone Number:</strong> {{ bandmember.phone_number }}</p>
+    </div>
+
+    <div>
+        <h2>Emergency Contact</h2>
+        <p><strong>Name:</strong> {{ bandmember.emergency_contact_name }}</p>
+        <p><strong>Phone:</strong> {{ bandmember.emergency_contact_phone }}</p>
+    </div>
+
+    <div>
+        <h2>Other Information</h2>
+        <p><strong>Bio:</strong> {{ bandmember.bio|safe }}</p>
+        <p><strong>Birthday:</strong> {{ bandmember.birthday|date:"F j" }}</p>
+        <p><strong>Dietary Restrictions:</strong> {{ bandmember.dietary_restrictions }}</p>
+        <p><strong>T-Shirt Size:</strong> {{ bandmember.tshirt_size }}</p>
+    </div>
+
+    <a href="{% url 'band:profile_update' %}">Edit Profile</a>
+    <br />
+    <a href="{% url 'band:password_change' %}">Change Password</a>
+{% endblock %}

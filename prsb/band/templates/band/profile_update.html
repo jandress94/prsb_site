@@ -1,0 +1,19 @@
+{% extends "band/base.html" %}
+
+{% block title %}My Profile | PRSB{% endblock %}
+
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:profile_detail' %}>My Profile</a>
+    > Update
+{% endblock %}
+
+{% block content %}
+    <h1>My Profile</h1>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Save</button>
+    </form>
+{% endblock %}

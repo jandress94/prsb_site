@@ -7,7 +7,7 @@ from django.db import connection
 from django.forms import modelformset_factory, formset_factory, inlineformset_factory
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views import generic
 from tinymce.models import HTMLField
@@ -49,6 +49,36 @@ class MemberDetailView(generic.DetailView):
             gig__start_datetime__gte=timezone.now()
         )
         return context
+
+
+class ProfileDetailView(generic.DetailView):
+    model = BandMember
+    template_name = "band/profile_detail.html"
+    context_object_name = "bandmember"
+
+    def get_object(self, queryset=None):
+        # Get the BandMember instance for the currently logged-in user
+        return get_object_or_404(BandMember, user=self.request.user)
+
+
+class ProfileUpdateView(generic.UpdateView):
+    model = BandMember
+    fields = [
+        "phone_number",
+        "emergency_contact_name",
+        "emergency_contact_phone",
+        "bio",
+        "birthday",
+        "dietary_restrictions",
+        "tshirt_size",
+    ]
+    template_name = "band/profile_update.html"
+    success_url = reverse_lazy('band:index')
+
+    def get_object(self, queryset=None):
+        # Get the BandMember instance for the currently logged-in user
+        return get_object_or_404(BandMember, user=self.request.user)
+
 
 
 # class MemberUpdateView(generic.UpdateView):
