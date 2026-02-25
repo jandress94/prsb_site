@@ -669,6 +669,47 @@ class GigPartAssignmentPrintView(generic.TemplateView):
         return context
 
 
+class GigPartAssignmentByMemberView(generic.TemplateView):
+    """Part assignments grouped by band member; each member's table has one row per song they play."""
+    template_name = 'band/gig_part_assignment_by_member.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        gig_id = context['pk']
+        context['gig'] = gig = Gig.objects.get(id=gig_id)
+
+        overrides = GigPartAssignmentOverride.objects.filter(
+            gig_instrument__gig=gig
+        ).order_by('song_part__song', 'song_part', 'member')
+
+        setlist_assignments, _, _ = get_gig_part_assignments(gig, list(overrides))
+        setlist_sorted = GigPartAssignmentPrintView._sort_by_setlist_order(gig, setlist_assignments)
+
+        # 1-based song number by setlist order
+        song_to_number = {gpa.song: i + 1 for i, gpa in enumerate(setlist_sorted)}
+
+        # Group by member: member -> list of (song_number, song_name, part, instrument) ordered by song number
+        member_rows = {}
+        for gpa in setlist_sorted:
+            for pa in gpa.part_assignments:
+                row = (
+                    song_to_number[gpa.song],
+                    gpa.song.title,
+                    pa.song_part,
+                    pa.instrument,
+                )
+                member_rows.setdefault(pa.member, []).append(row)
+
+        for rows in member_rows.values():
+            rows.sort(key=lambda r: r[0])
+
+        # Sort members by name for stable display order
+        members_sorted = sorted(member_rows.keys(), key=lambda m: (m.user.first_name, m.user.last_name))
+        context['member_assignments'] = [(member, member_rows[member]) for member in members_sorted]
+
+        return context
+
+
 class InstrumentListView(generic.ListView):
     model = Instrument
 

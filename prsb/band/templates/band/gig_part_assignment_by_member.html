@@ -1,0 +1,48 @@
+{% extends "band/base.html" %}
+{% load static %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'band/css/print.css' %}">
+{% endblock %}
+
+{% block title %}{{ gig.name }} | Part Assignments by Member | PRSB{% endblock %}
+
+{% block nav %}
+    <a href={% url 'band:index' %}>Home</a>
+    > <a href={% url 'band:gig_list' %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a>
+    > <a href={% url 'band:gig_part_assignments_detail' gig.id %}>Part Assignments</a>
+    > By Member
+{% endblock %}
+
+{% block content %}
+    <h1>{{ gig.name }}</h1>
+    <h2>Part Assignments by Member</h2>
+
+    {% for member, rows in member_assignments %}
+        <div class="avoid-break">
+            <h3>{{ member }}</h3>
+
+            <table class="sortable">
+                <thead>
+                    <tr>
+                        <th>Song #</th>
+                        <th>Song Name</th>
+                        <th>Part</th>
+                        <th>Instrument</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for song_number, song_name, part, instrument in rows %}
+                        <tr>
+                            <td sorttable_customkey="{{ song_number }}">{{ song_number }}</td>
+                            <td>{{ song_name }}</td>
+                            <td sorttable_customkey="{{ part.get_order }}">{{ part }}</td>
+                            <td sorttable_customkey="{{ instrument.order }}">{{ instrument }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endfor %}
+{% endblock %}
