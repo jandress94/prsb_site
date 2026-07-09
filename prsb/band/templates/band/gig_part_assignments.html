@@ -24,6 +24,7 @@
                     <th>Part</th>
                     <th>Instrument</th>
                     <th>Band Member</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -34,6 +35,12 @@
                         <td sorttable_customkey={{ pao.song_part.get_order }}>{{ pao.song_part }}</td>
                         <td sorttable_customkey={{ pao.gig_instrument.instrument.order }}>{{ pao.gig_instrument.instrument }}</td>
                         <td>{{ pao.member }}</td>
+                        <td sorttable_customkey=100>
+                            <form method="post" action="{% url 'band:gig_part_assignment_override_delete' gig.id pao.id %}">
+                                {% csrf_token %}
+                                <button type="submit" aria-label="Delete override">❌</button>
+                            </form>
+                        </td>
                     </tr>
                 {% endfor %}
             </tbody>

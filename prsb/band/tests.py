@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from band.models import (
@@ -140,3 +141,19 @@ class GigPartAssignmentOverrideTestCase(TestCase):
         override = form.save()
         self.assertEqual(override.override_type, OverrideType.NOT_PLAYING)
         self.assertEqual(override.performance_readiness, PerformanceReadiness.READY)
+
+    def test_delete_override_from_gig_part_assignments_page(self):
+        drums_at_gig = GigInstrument.objects.get(gig=self.gig, instrument=self.drums)
+        override = GigPartAssignmentOverride.objects.create(
+            member=self.member_a.bandmember,
+            song_part=self.part_a,
+            gig_instrument=drums_at_gig,
+            override_type=OverrideType.NOT_PLAYING,
+        )
+
+        response = self.client.post(
+            reverse('band:gig_part_assignment_override_delete', kwargs={'pk': self.gig.pk, 'override_id': override.pk}),
+        )
+
+        self.assertRedirects(response, reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
+        self.assertFalse(GigPartAssignmentOverride.objects.filter(pk=override.pk).exists())

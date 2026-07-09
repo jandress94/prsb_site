@@ -641,6 +641,17 @@ class GigPartAssignmentOverrideCreateView(generic.CreateView):
         return reverse("band:gig_part_assignments_detail", kwargs={"pk": self.kwargs['pk']})
 
 
+class GigPartAssignmentOverrideDeleteView(generic.View):
+    def post(self, request, pk, override_id):
+        override = get_object_or_404(
+            GigPartAssignmentOverride,
+            pk=override_id,
+            gig_instrument__gig_id=pk,
+        )
+        override.delete()
+        return HttpResponseRedirect(reverse("band:gig_part_assignments_detail", kwargs={'pk': pk}))
+
+
 class GigPartAssignmentPrintView(generic.TemplateView):
     template_name = 'band/gig_part_assignment_print.html'
 
