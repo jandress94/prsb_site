@@ -19,6 +19,7 @@
         <table class="sortable">
             <thead>
                 <tr>
+                    <th>Type</th>
                     <th>Song</th>
                     <th>Part</th>
                     <th>Instrument</th>
@@ -27,7 +28,8 @@
             </thead>
             <tbody>
                 {% for pao in part_assignment_overrides %}
-                    <tr>
+                    <tr {% if pao.override_type == "not_playing" %}class="error"{% endif %}>
+                        <td>{{ pao.get_override_type_display }}</td>
                         <td>{{ pao.song_part.song }}</td>
                         <td sorttable_customkey={{ pao.song_part.get_order }}>{{ pao.song_part }}</td>
                         <td sorttable_customkey={{ pao.gig_instrument.instrument.order }}>{{ pao.gig_instrument.instrument }}</td>

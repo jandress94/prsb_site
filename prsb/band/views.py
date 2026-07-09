@@ -14,7 +14,7 @@ from tinymce.models import HTMLField
 
 from scripts.gig_part_assignment import get_gig_part_assignments, GigPartAssignment
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
-    GigPartAssignmentOverride, GigInstrument, GigSetlistEntry
+    GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
 
 
 def index(request):
@@ -596,7 +596,7 @@ class GigInstrumentChoiceField(forms.ModelChoiceField):
 class GigPartAssignmentOverrideForm(forms.ModelForm):
     class Meta:
         model = GigPartAssignmentOverride
-        fields = ['member', 'song_part', 'gig_instrument', 'performance_readiness']
+        fields = ['override_type', 'member', 'song_part', 'gig_instrument', 'performance_readiness']
 
     gig_instrument = GigInstrumentChoiceField(
         queryset=GigInstrument.objects.all(),   # will be overridden below when we know which gig
@@ -614,6 +614,16 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
                                                                    user__is_active=True)
         self.fields['song_part'].queryset = SongPart.objects.filter(song__in_gig_rotation=True).order_by('song', '_order')
         self.fields['gig_instrument'].queryset = GigInstrument.objects.filter(gig_id=self.gig_id)
+        self.fields['performance_readiness'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        override_type = cleaned_data.get('override_type')
+        if override_type == OverrideType.NOT_PLAYING:
+            cleaned_data['performance_readiness'] = PerformanceReadiness.READY
+        elif override_type == OverrideType.ASSIGN and not cleaned_data.get('performance_readiness'):
+            self.add_error('performance_readiness', 'This field is required.')
+        return cleaned_data
 
 
 class GigPartAssignmentOverrideCreateView(generic.CreateView):

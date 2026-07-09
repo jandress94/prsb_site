@@ -12,7 +12,7 @@ from collections import Counter
 
 django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
-    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry
+    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType
 
 
 RAND_SEED = 0
@@ -43,9 +43,25 @@ class GigPartAssignment:
         self.unplayed_instruments = {i: c for i, c in remaining_instrument_counts.items() if c != 0}
 
 
+def _partition_overrides(part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignmentOverride], set[tuple]]:
+    assign_overrides = []
+    not_playing = set()
+    for override in part_assignment_overrides:
+        if override.override_type == OverrideType.NOT_PLAYING:
+            not_playing.add((override.member_id, override.song_part_id, override.gig_instrument.instrument_id))
+        else:
+            assign_overrides.append(override)
+    return assign_overrides, not_playing
+
+
 def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment],
                                   gig_instruments: list[GigInstrument], member_song_counts: Counter,
                                   part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[PartAssignment] | None, float]:
+    assign_overrides, not_playing = _partition_overrides(part_assignment_overrides)
+    all_assignments = [
+        assignment for assignment in all_assignments
+        if (assignment.member_id, assignment.song_part_id, assignment.instrument_id) not in not_playing
+    ]
     members = {}
     instruments = {}
     parts = {}
@@ -62,12 +78,12 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     num_assignments = len(all_assignments)
     num_vars += num_assignments
 
-    for i, override in enumerate(part_assignment_overrides, start=num_vars):
+    for i, override in enumerate(assign_overrides, start=num_vars):
         members.setdefault(override.member, []).append(i)
         instruments.setdefault(override.gig_instrument.instrument, []).append(i)
         if override.performance_readiness == PerformanceReadiness.READY:
             parts.setdefault(override.song_part, []).append(i)
-    num_overrides = len(part_assignment_overrides)
+    num_overrides = len(assign_overrides)
     num_vars += num_overrides
 
     num_members = len(members)
@@ -180,7 +196,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
                                                     song_part=pao.song_part,
                                                     instrument=pao.gig_instrument.instrument,
                                                     performance_readiness=pao.performance_readiness)
-                                     for pao in part_assignment_overrides]
+                                     for pao in assign_overrides]
     gig_part_assignments = list(itertools.compress(all_assignments + overrides_as_part_assignments, result.x))
     gig_part_assignments = sorted(gig_part_assignments, key=lambda gpa: (gpa.song_part._order, gpa.member.user.get_full_name()))
 
@@ -202,7 +218,8 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
 
     all_part_assignments = PartAssignment.objects.filter(~Exists(GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig,
                                                                                                           song_part__song=OuterRef("song_part__song"),
-                                                                                                          member=OuterRef("member"))),
+                                                                                                          member=OuterRef("member"),
+                                                                                                          override_type=OverrideType.ASSIGN)),
                                                          member__gigattendance__gig=gig,
                                                          member__gigattendance__status=GigAttendance.AVAILABLE,
                                                          instrument__giginstrument__in=gig_instruments,

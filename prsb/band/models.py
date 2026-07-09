@@ -92,6 +92,15 @@ class PerformanceReadiness:
     }
 
 
+class OverrideType:
+    ASSIGN = "assign"
+    NOT_PLAYING = "not_playing"
+    CHOICES = {
+        ASSIGN: "Assign to Part",
+        NOT_PLAYING: "Not Playing",
+    }
+
+
 class PartAssignment(models.Model):
     member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
@@ -199,19 +208,36 @@ class GigPartAssignmentOverride(models.Model):
     member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     song_part = models.ForeignKey(SongPart, on_delete=models.CASCADE)
     gig_instrument = models.ForeignKey(GigInstrument, on_delete=models.CASCADE)
+    override_type = models.CharField(max_length=256,
+                                     choices=OverrideType.CHOICES,
+                                     default=OverrideType.ASSIGN)
     performance_readiness = models.CharField(max_length=256,
                                              choices=PerformanceReadiness.CHOICES_OVERRIDES,
                                              default=PerformanceReadiness.READY)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['member', 'song_part', 'gig_instrument'],
+                name='unique_gig_part_assignment_override',
+            ),
+        ]
+
     def __str__(self):
+        if self.override_type == OverrideType.NOT_PLAYING:
+            return (f'{self.member} does not play {self.gig_instrument.instrument} on '
+                    f'{self.song_part} at {self.gig_instrument.gig}')
         return f'{self.member} plays {self.gig_instrument.instrument} on {self.song_part} at {self.gig_instrument.gig}'
 
     def clean(self):
         super().clean()
-        if GigPartAssignmentOverride.objects.filter(member=self.member,
-                                                    gig_instrument__gig=self.gig_instrument.gig,
-                                                    song_part__song=self.song_part.song).exclude(pk=self.pk).exists():
-            raise ValidationError("A band member can only have one override per song per gig")
+        if self.override_type == OverrideType.ASSIGN and GigPartAssignmentOverride.objects.filter(
+                member=self.member,
+                gig_instrument__gig=self.gig_instrument.gig,
+                song_part__song=self.song_part.song,
+                override_type=OverrideType.ASSIGN,
+        ).exclude(pk=self.pk).exists():
+            raise ValidationError("A band member can only have one assign override per song per gig")
 
 
 class BandSpecialDate(models.Model):

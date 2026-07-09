@@ -165,7 +165,7 @@ class GigPartAssignmentOverrideAdmin(admin.ModelAdmin):
     def instrument(self, obj: GigPartAssignmentOverride):
         return obj.gig_instrument.instrument
 
-    list_display = ['gig', 'member', 'song_title', 'song_part', 'instrument']
+    list_display = ['gig', 'member', 'song_title', 'song_part', 'instrument', 'override_type']
     list_filter = [GigFilter, MemberUserFilter, SongFilter]
 
 admin.site.register(GigPartAssignmentOverride, GigPartAssignmentOverrideAdmin)
