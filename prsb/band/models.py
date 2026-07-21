@@ -129,7 +129,7 @@ class Gig(models.Model):
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
 
-    address = models.CharField(blank=True)
+    address = models.CharField(max_length=512, blank=True)
 
     notes = tinymce_models.HTMLField(blank=True)
 
