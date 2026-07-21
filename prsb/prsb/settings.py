@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 import logging
 
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == "test"
 
 
 def get_env_var(var_name: str, default: str | None = None, required: bool = True) -> str | None:
@@ -30,7 +33,11 @@ def get_env_var(var_name: str, default: str | None = None, required: bool = True
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = get_env_var('DJANGO_SECRET_KEY')
+SECRET_KEY = get_env_var(
+    'DJANGO_SECRET_KEY',
+    default='test-insecure-secret-key' if RUNNING_TESTS else None,
+    required=not RUNNING_TESTS,
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = bool(get_env_var('DEBUG', default='False', required=False))
@@ -92,19 +99,28 @@ WSGI_APPLICATION = 'prsb.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "NAME": "pg_db_service",
-        "ENGINE": "django.db.backends.postgresql",
-        "OPTIONS": {
-            "host": get_env_var('PG_HOST'),
-            "user": "prsb_postgres",
-            "password": get_env_var('PG_PASSWORD'),
-            "dbname": "prsb_db",
-            "port": 5432,
-        },
+if RUNNING_TESTS:
+    # Keep unit tests off the real Postgres instance.
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "NAME": "pg_db_service",
+            "ENGINE": "django.db.backends.postgresql",
+            "OPTIONS": {
+                "host": get_env_var('PG_HOST'),
+                "user": "prsb_postgres",
+                "password": get_env_var('PG_PASSWORD'),
+                "dbname": "prsb_db",
+                "port": 5432,
+            },
+        }
+    }
 
 
 # Password validation

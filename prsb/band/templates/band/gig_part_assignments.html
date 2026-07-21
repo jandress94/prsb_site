@@ -177,6 +177,26 @@
         </tbody>
     </table>
 
+    <h2>Max Instruments Used</h2>
+    <table class="sortable">
+        <thead>
+            <tr>
+                <th>Instrument</th>
+                <th>Max Used</th>
+                <th>Available</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for instrument, max_used, available in max_instrument_usage %}
+                <tr>
+                    <td>{{ instrument }}</td>
+                    <td>{{ max_used }}</td>
+                    <td>{{ available }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
     <h2>Options and Settings</h2>
     <div>
         <p>

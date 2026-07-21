@@ -260,6 +260,29 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
     return gig_part_assignments_setlist, gig_part_assignments_recs, song_counts_to_return
 
 
+def get_max_instrument_usage(
+    gig_part_assignments: list[GigPartAssignment],
+    gig_instruments: list[GigInstrument],
+) -> list[Tuple]:
+    """Return (instrument, max_used, available) for each gig instrument, sorted by instrument order.
+
+    max_used is the maximum number of players assigned to that instrument on any single song
+    in gig_part_assignments. Instruments never used have max_used 0.
+    """
+    max_used_by_instrument: Counter = Counter()
+    for gpa in gig_part_assignments:
+        played = Counter(pa.instrument for pa in gpa.part_assignments)
+        for instrument, count in played.items():
+            if count > max_used_by_instrument[instrument]:
+                max_used_by_instrument[instrument] = count
+
+    rows = [
+        (gi.instrument, max_used_by_instrument[gi.instrument], gi.gig_quantity)
+        for gi in gig_instruments
+    ]
+    return sorted(rows, key=lambda row: row[0].order)
+
+
 def main():
     gig = Gig.objects.get(name__contains="Wedding")
     print(gig)

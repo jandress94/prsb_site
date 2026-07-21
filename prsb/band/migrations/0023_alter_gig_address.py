@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='gig',
             name='address',
-            field=models.CharField(blank=True),
+            field=models.CharField(blank=True, max_length=512),
         ),
     ]

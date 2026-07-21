@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views import generic
 from tinymce.models import HTMLField
 
-from scripts.gig_part_assignment import get_gig_part_assignments, GigPartAssignment
+from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage, GigPartAssignment
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
     GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
 
@@ -584,6 +584,14 @@ class GigPartAssignmentsDetailView(generic.TemplateView):
 
         context["gig_part_assignments_setlist"], context["gig_part_assignments_recs"], member_song_counts = get_gig_part_assignments(gig, context['part_assignment_overrides'])
         context['member_song_counts'] = sorted([(k, v) for k, v in member_song_counts.items()], key=lambda x: x[1], reverse=True)
+
+        scoped_assignments = (
+            context["gig_part_assignments_setlist"]
+            if context["gig_part_assignments_setlist"]
+            else context["gig_part_assignments_recs"]
+        )
+        gig_instruments = list(GigInstrument.objects.filter(gig=gig).select_related("instrument"))
+        context["max_instrument_usage"] = get_max_instrument_usage(scoped_assignments, gig_instruments)
 
         return context
 
