@@ -563,7 +563,7 @@ class GigSetlistUpdateView(generic.View):
 
 
 class GigSetlistAddSongView(generic.View):
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         gig_id = kwargs['gig_id']
         setlist_entry = GigSetlistEntry(gig_id=gig_id, song_id=kwargs['song_id'])
         setlist_entry.save()
