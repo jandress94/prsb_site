@@ -10,7 +10,9 @@ from band.models import (
     GigSetlistEntry, Instrument, OverrideType, PartAssignment, PerformanceReadiness,
     Song, SongPart,
 )
-from scripts.gig_part_assignment import get_gig_part_assignments
+from types import SimpleNamespace
+
+from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage
 from band.views import GigPartAssignmentOverrideForm
 
 
@@ -157,3 +159,50 @@ class GigPartAssignmentOverrideTestCase(TestCase):
 
         self.assertRedirects(response, reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
         self.assertFalse(GigPartAssignmentOverride.objects.filter(pk=override.pk).exists())
+
+
+class MaxInstrumentUsageTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.lead = Instrument.objects.create(name="Lead", order=0)
+        cls.tenor = Instrument.objects.create(name="Double Tenor", order=1)
+        cls.congas = Instrument.objects.create(name="Congas", order=2)
+
+        cls.gig = Gig.objects.create(
+            name="Max Usage Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        cls.gi_lead = GigInstrument.objects.create(gig=cls.gig, instrument=cls.lead, gig_quantity=7)
+        cls.gi_tenor = GigInstrument.objects.create(gig=cls.gig, instrument=cls.tenor, gig_quantity=1)
+        cls.gi_congas = GigInstrument.objects.create(gig=cls.gig, instrument=cls.congas, gig_quantity=1)
+        cls.gig_instruments = [cls.gi_lead, cls.gi_tenor, cls.gi_congas]
+
+    def _gpa(self, *instruments):
+        """Minimal stand-in: helper only reads part_assignments[].instrument."""
+        return SimpleNamespace(
+            part_assignments=[SimpleNamespace(instrument=inst) for inst in instruments]
+        )
+
+    def test_peak_across_songs(self):
+        gpas = [
+            self._gpa(self.lead, self.lead, self.lead),           # 3 Lead
+            self._gpa(self.lead, self.lead, self.lead, self.lead, self.lead),  # 5 Lead
+        ]
+        result = get_max_instrument_usage(gpas, self.gig_instruments)
+        by_name = {inst.name: (max_used, available) for inst, max_used, available in result}
+        self.assertEqual(by_name["Lead"], (5, 7))
+
+    def test_unused_instrument_shows_zero(self):
+        gpas = [self._gpa(self.lead, self.tenor)]
+        result = get_max_instrument_usage(gpas, self.gig_instruments)
+        by_name = {inst.name: (max_used, available) for inst, max_used, available in result}
+        self.assertEqual(by_name["Congas"], (0, 1))
+        self.assertEqual([inst.name for inst, _, _ in result], ["Lead", "Double Tenor", "Congas"])
+
+    def test_empty_assignments_all_zero(self):
+        result = get_max_instrument_usage([], self.gig_instruments)
+        self.assertEqual(
+            [(inst.name, max_used, available) for inst, max_used, available in result],
+            [("Lead", 0, 7), ("Double Tenor", 0, 1), ("Congas", 0, 1)],
+        )
