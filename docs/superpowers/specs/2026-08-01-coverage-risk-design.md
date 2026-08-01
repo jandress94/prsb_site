@@ -50,7 +50,9 @@ where `D` = number of full-band gigs actually found in the lookback (`min(N, ava
 
 Over `PartAssignment`s that are `ready` or `backup` (`not_ready` ignored).
 
-A member may have multiple instrument rows on the same part. Count **at most one contribution per (member, song_part)**, using that member’s **best** readiness weight on the part (`ready` beats `backup`).
+A member may have multiple instrument rows on the **same** part. Count **at most one contribution per (member, song_part)**, using that member’s **best** readiness weight on that part (`ready` beats `backup`).
+
+If the same member covers **different** parts on a song, they contribute to **each** of those parts normally — the one-per-part rule does not collapse across parts.
 
 ```
 contribution = readiness_weight × attendance_rate
