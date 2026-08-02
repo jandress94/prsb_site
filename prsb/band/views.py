@@ -13,6 +13,7 @@ from django.views import generic
 from tinymce.models import HTMLField
 
 from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage, GigPartAssignment
+from scripts.coverage_risk import DEFAULT_LOOKBACK, get_coverage_risk
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
     GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
 
@@ -312,7 +313,8 @@ class GigForm(forms.ModelForm):
                   'start_datetime',
                   'end_datetime',
                   'address',
-                  'notes']
+                  'notes',
+                  'is_small_group']
 
     # Override the widget for the DateTimeField
     start_datetime = forms.DateTimeField(
@@ -741,6 +743,37 @@ class GigPartAssignmentByMemberView(generic.TemplateView):
 
 class InstrumentListView(generic.ListView):
     model = Instrument
+
+
+MAX_LOOKBACK = 200
+
+
+def _parse_lookback(request) -> int:
+    raw = request.GET.get("n")
+    if raw is None:
+        return DEFAULT_LOOKBACK
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_LOOKBACK
+    if n < 1:
+        return DEFAULT_LOOKBACK
+    return min(n, MAX_LOOKBACK)
+
+
+class ReportsView(generic.TemplateView):
+    template_name = "band/reports.html"
+
+
+class CoverageRiskView(generic.TemplateView):
+    template_name = "band/coverage_risk.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lookback = _parse_lookback(self.request)
+        context["lookback"] = lookback
+        context["report"] = get_coverage_risk(lookback=lookback)
+        return context
 
 
 def health_check(request):

@@ -36,7 +36,12 @@ admin.site.register(BandMember, BandMemberAdmin)
 
 
 class InstrumentAdmin(OrderedModelAdmin):
-    list_display = ('name', 'move_up_down_links')
+    list_display = (
+        'name',
+        'include_in_gig_song_count',
+        'include_in_coverage_risk',
+        'move_up_down_links',
+    )
 
 admin.site.register(Instrument, InstrumentAdmin)
 
@@ -82,8 +87,8 @@ def gig_date(obj: Gig):
 
 
 class GigAdmin(admin.ModelAdmin):
-    list_display = ['name', gig_is_upcoming, gig_date]
-    list_filter = ['start_datetime']
+    list_display = ['name', gig_is_upcoming, gig_date, 'is_small_group']
+    list_filter = ['start_datetime', 'is_small_group']
 
 admin.site.register(Gig, GigAdmin)
 

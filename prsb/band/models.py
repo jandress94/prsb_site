@@ -72,6 +72,11 @@ class Instrument(OrderedModel):
     name = models.CharField(max_length=256)
     quantity = models.PositiveSmallIntegerField(default=1)
     include_in_gig_song_count = models.BooleanField(default=True)
+    include_in_coverage_risk = models.BooleanField(
+        default=True,
+        help_text="If unchecked, assignments on this instrument are ignored by the Coverage Risk report "
+                  "(e.g. Drumset / Engine Room, where any drummer can cover).",
+    )
 
     def __str__(self):
         return self.name
@@ -132,6 +137,11 @@ class Gig(models.Model):
     address = models.CharField(max_length=512, blank=True)
 
     notes = tinymce_models.HTMLField(blank=True)
+
+    is_small_group = models.BooleanField(
+        default=False,
+        help_text="If checked, this gig is excluded from coverage-risk attendance stats.",
+    )
 
     def clean(self):
         super().clean()

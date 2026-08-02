@@ -1,0 +1,12 @@
+{% extends "band/base.html" %}
+{% block title %}Reports | PRSB{% endblock %}
+{% block nav %}
+    <a href="{% url 'band:index' %}">Home</a>
+    > Reports
+{% endblock %}
+{% block content %}
+    <h2>Reports</h2>
+    <ul>
+        <li><a href="{% url 'band:coverage_risk' %}">Coverage Risk</a> — which rotation songs/parts are most fragile given attendance-weighted coverage</li>
+    </ul>
+{% endblock %}

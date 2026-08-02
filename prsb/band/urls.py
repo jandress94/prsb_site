@@ -55,6 +55,9 @@ urlpatterns = [
 
     path("instruments/", views.InstrumentListView.as_view(), name="instrument_list"),
 
+    path("reports/", views.ReportsView.as_view(), name="reports"),
+    path("reports/coverage-risk/", views.CoverageRiskView.as_view(), name="coverage_risk"),
+
     path("health/", views.health_check),
 
     path('api/instruments/', views.get_instruments, name='api_instruments'),

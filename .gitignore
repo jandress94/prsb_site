@@ -4,6 +4,9 @@ env_vars/*
 build.zip
 prsb/staticfiles/*
 
+# Local agent / brainstorm scratch (not docs/superpowers specs & plans)
+.superpowers/
+
 lambda_package/*
 lambda-deployment.zip
 
