@@ -13,6 +13,7 @@ from band.models import (
 from types import SimpleNamespace
 
 from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage
+from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
 from band.views import GigPartAssignmentOverrideForm
 
 
@@ -225,3 +226,157 @@ class GigIsSmallGroupTestCase(TestCase):
             is_small_group=True,
         )
         self.assertTrue(Gig.objects.get(pk=gig.pk).is_small_group)
+
+
+class CoverageRiskScoringTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.now = timezone.now()
+        cls.lead = Instrument.objects.create(name="Lead", order=0)
+        cls.bass = Instrument.objects.create(name="Bass", order=1)
+
+        cls.alice_user = User.objects.create_user(username="cr_alice", first_name="Alice", last_name="A")
+        cls.bob_user = User.objects.create_user(username="cr_bob", first_name="Bob", last_name="B")
+        cls.cara_user = User.objects.create_user(username="cr_cara", first_name="Cara", last_name="C")
+        cls.alice = BandMember.objects.get(user=cls.alice_user)
+        cls.bob = BandMember.objects.get(user=cls.bob_user)
+        cls.cara = BandMember.objects.get(user=cls.cara_user)
+
+        cls.song = Song.objects.create(title="Yellow Bird", in_gig_rotation=True)
+        cls.other = Song.objects.create(title="Not In Rotation", in_gig_rotation=False)
+        cls.part_lead = SongPart.objects.create(song=cls.song, name="Lead")
+        cls.part_bass = SongPart.objects.create(song=cls.song, name="Bass")
+        SongPart.objects.create(song=cls.other, name="Lead")
+
+    def _past_gig(self, days_ago, *, small=False, name=None):
+        start = self.now - timedelta(days=days_ago)
+        return Gig.objects.create(
+            name=name or f"Gig-{days_ago}",
+            start_datetime=start,
+            end_datetime=start + timedelta(hours=2),
+            is_small_group=small,
+        )
+
+    def test_zero_gigs_attendance_rate_is_one(self):
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        self.assertEqual(report.lookback_gigs_used, 0)
+        song = report.songs[0]
+        lead = next(p for p in song.parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.effective_coverage, 1.0)
+        self.assertAlmostEqual(lead.coverers[0].attendance_rate, 1.0)
+
+    def test_small_group_and_future_gigs_excluded(self):
+        full = self._past_gig(2, name="Full")
+        self._past_gig(1, small=True, name="Small")
+        future = Gig.objects.create(
+            name="Future",
+            start_datetime=self.now + timedelta(days=3),
+            end_datetime=self.now + timedelta(days=3, hours=2),
+        )
+        GigAttendance.objects.create(gig=full, member=self.alice, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=future, member=self.alice, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        self.assertEqual(report.lookback_gigs_used, 1)
+        lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.coverers[0].attendance_rate, 1.0)
+
+    def test_attendance_denominator_is_lookback_count(self):
+        g1 = self._past_gig(3)
+        g2 = self._past_gig(2)
+        GigAttendance.objects.create(gig=g1, member=self.alice, status=GigAttendance.AVAILABLE)
+        # g2: no response for alice
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        self.assertEqual(report.lookback_gigs_used, 2)
+        lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.effective_coverage, 0.5)
+        self.assertAlmostEqual(lead.coverers[0].attendance_rate, 0.5)
+
+    def test_backup_weight_and_not_ready_ignored(self):
+        gig = self._past_gig(1)
+        GigAttendance.objects.create(gig=gig, member=self.alice, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=gig, member=self.bob, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.BACKUP,
+        )
+        PartAssignment.objects.create(
+            member=self.bob, song_part=self.part_lead, instrument=self.bass,
+            performance_readiness=PerformanceReadiness.NOT_READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.effective_coverage, 0.5)  # backup * 1.0
+        self.assertEqual(len(lead.coverers), 1)
+
+    def test_one_contribution_per_member_best_readiness(self):
+        gig = self._past_gig(1)
+        GigAttendance.objects.create(gig=gig, member=self.alice, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.BACKUP,
+        )
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.bass,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.effective_coverage, 1.0)
+        self.assertEqual(len(lead.coverers), 2)
+
+    def test_member_contributes_to_multiple_parts(self):
+        gig = self._past_gig(1)
+        GigAttendance.objects.create(gig=gig, member=self.alice, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_bass, instrument=self.bass,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        song = next(s for s in report.songs if s.song.id == self.song.id)
+        by_part = {p.song_part.name: p.effective_coverage for p in song.parts}
+        self.assertAlmostEqual(by_part["Lead"], 1.0)
+        self.assertAlmostEqual(by_part["Bass"], 1.0)
+
+    def test_song_risk_is_worst_part_rotation_only(self):
+        gig = self._past_gig(1)
+        GigAttendance.objects.create(gig=gig, member=self.alice, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        # Bass uncovered
+        report = get_coverage_risk(lookback=10)
+        titles = [s.song.title for s in report.songs]
+        self.assertIn("Yellow Bird", titles)
+        self.assertNotIn("Not In Rotation", titles)
+        song = next(s for s in report.songs if s.song.title == "Yellow Bird")
+        self.assertEqual(song.worst_part_name, "Bass")
+        self.assertAlmostEqual(song.risk, 1 / 0.01)
+
+    def test_unassigned_members_on_song(self):
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        song = next(s for s in report.songs if s.song.id == self.song.id)
+        names = {m.user.username for m in song.unassigned_members}
+        self.assertNotIn("cr_alice", names)
+        self.assertIn("cr_bob", names)
+        self.assertIn("cr_cara", names)
