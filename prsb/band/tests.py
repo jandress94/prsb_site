@@ -397,3 +397,33 @@ class CoverageRiskScoringTestCase(TestCase):
         self.assertNotIn("cr_alice", names)
         self.assertIn("cr_bob", names)
         self.assertIn("cr_cara", names)
+
+
+class CoverageRiskViewsTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="viewer", password="pass")
+        Song.objects.create(title="Rotation Song", in_gig_rotation=True)
+
+    def test_reports_hub_ok(self):
+        self.client.login(username="viewer", password="pass")
+        resp = self.client.get(reverse("band:reports"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Coverage Risk")
+
+    def test_coverage_risk_ok_default_n(self):
+        self.client.login(username="viewer", password="pass")
+        resp = self.client.get(reverse("band:coverage_risk"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["lookback"], 10)
+
+    def test_coverage_risk_n_query_param(self):
+        self.client.login(username="viewer", password="pass")
+        resp = self.client.get(reverse("band:coverage_risk"), {"n": "5"})
+        self.assertEqual(resp.context["lookback"], 5)
+
+    def test_coverage_risk_invalid_n_defaults(self):
+        self.client.login(username="viewer", password="pass")
+        for bad in ["0", "-3", "abc"]:
+            resp = self.client.get(reverse("band:coverage_risk"), {"n": bad})
+            self.assertEqual(resp.context["lookback"], 10, msg=bad)

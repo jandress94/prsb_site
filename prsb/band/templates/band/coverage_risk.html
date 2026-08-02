@@ -1,0 +1,67 @@
+{% extends "band/base.html" %}
+{% block title %}Coverage Risk | PRSB{% endblock %}
+{% block nav %}
+    <a href="{% url 'band:index' %}">Home</a>
+    > <a href="{% url 'band:reports' %}">Reports</a>
+    > Coverage Risk
+{% endblock %}
+{% block content %}
+    <h2>Coverage Risk</h2>
+    <p>
+        Rotation songs ranked by worst-part risk.
+        Effective coverage = sum of (readiness weight × attendance rate) per coverer;
+        ready=1.0, backup=0.5. Attendance from the last {{ lookback }} past full-band gig{{ lookback|pluralize }}
+        ({{ report.lookback_gigs_used }} used).
+    </p>
+    <form method="get">
+        <label>
+            Lookback (full-band gigs):
+            <input type="number" name="n" min="1" value="{{ lookback }}">
+        </label>
+        <button type="submit">Update</button>
+    </form>
+
+    {% for song in report.songs %}
+        <details {% if forloop.first %}open{% endif %}>
+            <summary>
+                <strong>{{ song.song.title }}</strong>
+                — risk {{ song.risk|floatformat:2 }}
+                · worst: {{ song.worst_part_name }}
+                ({{ song.worst_part_effective_coverage|floatformat:2 }} eff.)
+            </summary>
+            {% for part in song.parts %}
+                <h4>{{ part.song_part.name }} — effective {{ part.effective_coverage|floatformat:2 }} · risk {{ part.risk|floatformat:2 }}</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Coverer</th>
+                            <th>Instrument</th>
+                            <th>Readiness</th>
+                            <th>Attend rate</th>
+                            <th>Contrib</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in part.coverers %}
+                            <tr {% if c.readiness == "backup" %}class="warning"{% endif %}>
+                                <td>{{ c.member }}</td>
+                                <td>{{ c.instrument }}</td>
+                                <td>{{ c.readiness }}</td>
+                                <td>{{ c.attendance_rate|floatformat:2 }}</td>
+                                <td>{{ c.contribution|floatformat:2 }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr class="error"><td colspan="5">No ready/backup coverers</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endfor %}
+            <p>
+                <strong>No assignment on this song:</strong>
+                {% for m in song.unassigned_members %}{{ m }}{% if not forloop.last %}, {% endif %}{% empty %}(none){% endfor %}
+            </p>
+        </details>
+    {% empty %}
+        <p>No songs in gig rotation.</p>
+    {% endfor %}
+{% endblock %}
