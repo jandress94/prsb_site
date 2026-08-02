@@ -30,7 +30,7 @@
                 ({{ song.worst_part_effective_coverage|floatformat:2 }} eff.)
             </summary>
             {% for part in song.parts %}
-                <h4>{{ part.song_part.name }} — effective {{ part.effective_coverage|floatformat:2 }} · risk {{ part.risk|floatformat:2 }}</h4>
+                <h4>{{ part.song_part.name }} — effective coverage {{ part.effective_coverage|floatformat:2 }} · risk {{ part.risk|floatformat:2 }}</h4>
                 <table>
                     <thead>
                         <tr>
