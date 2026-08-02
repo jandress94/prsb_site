@@ -133,6 +133,11 @@ class Gig(models.Model):
 
     notes = tinymce_models.HTMLField(blank=True)
 
+    is_small_group = models.BooleanField(
+        default=False,
+        help_text="If checked, this gig is excluded from coverage-risk attendance stats.",
+    )
+
     def clean(self):
         super().clean()
         if self.end_datetime <= self.start_datetime:

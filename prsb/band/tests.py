@@ -206,3 +206,22 @@ class MaxInstrumentUsageTestCase(TestCase):
             [(inst.name, max_used, available) for inst, max_used, available in result],
             [("Lead", 0, 7), ("Double Tenor", 0, 1), ("Congas", 0, 1)],
         )
+
+
+class GigIsSmallGroupTestCase(TestCase):
+    def test_default_is_full_band(self):
+        gig = Gig.objects.create(
+            name="Full Band Gig",
+            start_datetime=timezone.now() - timedelta(days=1),
+            end_datetime=timezone.now() - timedelta(days=1) + timedelta(hours=2),
+        )
+        self.assertFalse(gig.is_small_group)
+
+    def test_can_mark_small_group(self):
+        gig = Gig.objects.create(
+            name="Small Gig",
+            start_datetime=timezone.now() - timedelta(days=1),
+            end_datetime=timezone.now() - timedelta(days=1) + timedelta(hours=2),
+            is_small_group=True,
+        )
+        self.assertTrue(Gig.objects.get(pk=gig.pk).is_small_group)

@@ -312,7 +312,8 @@ class GigForm(forms.ModelForm):
                   'start_datetime',
                   'end_datetime',
                   'address',
-                  'notes']
+                  'notes',
+                  'is_small_group']
 
     # Override the widget for the DateTimeField
     start_datetime = forms.DateTimeField(
