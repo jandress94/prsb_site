@@ -745,6 +745,9 @@ class InstrumentListView(generic.ListView):
     model = Instrument
 
 
+MAX_LOOKBACK = 200
+
+
 def _parse_lookback(request) -> int:
     raw = request.GET.get("n")
     if raw is None:
@@ -755,7 +758,7 @@ def _parse_lookback(request) -> int:
         return DEFAULT_LOOKBACK
     if n < 1:
         return DEFAULT_LOOKBACK
-    return n
+    return min(n, MAX_LOOKBACK)
 
 
 class ReportsView(generic.TemplateView):

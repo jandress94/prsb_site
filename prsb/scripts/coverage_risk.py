@@ -139,7 +139,9 @@ def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
     rates = _attendance_rates(gigs)
 
     all_assignments = list(
-        PartAssignment.objects.filter(song_part__song__in_gig_rotation=True)
+        PartAssignment.objects.filter(
+            song_part__song__in_gig_rotation=True, member__user__is_active=True,
+        )
         .exclude(performance_readiness=PerformanceReadiness.NOT_READY)
         .select_related('member__user', 'instrument', 'song_part__song')
     )

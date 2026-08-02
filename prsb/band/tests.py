@@ -398,6 +398,23 @@ class CoverageRiskScoringTestCase(TestCase):
         self.assertIn("cr_bob", names)
         self.assertIn("cr_cara", names)
 
+    def test_inactive_member_excluded_from_coverers_and_coverage(self):
+        inactive_user = User.objects.create_user(
+            username="cr_inactive", first_name="In", last_name="Active", is_active=False,
+        )
+        inactive_member = BandMember.objects.get(user=inactive_user)
+        PartAssignment.objects.create(
+            member=inactive_member, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        song = next(s for s in report.songs if s.song.id == self.song.id)
+        lead = next(p for p in song.parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.effective_coverage, 0.0)
+        self.assertEqual(len(lead.coverers), 0)
+        member_names = {c.member.user.username for c in lead.coverers}
+        self.assertNotIn("cr_inactive", member_names)
+
 
 class CoverageRiskViewsTestCase(TestCase):
     @classmethod
@@ -427,3 +444,8 @@ class CoverageRiskViewsTestCase(TestCase):
         for bad in ["0", "-3", "abc"]:
             resp = self.client.get(reverse("band:coverage_risk"), {"n": bad})
             self.assertEqual(resp.context["lookback"], 10, msg=bad)
+
+    def test_coverage_risk_huge_n_clamped(self):
+        self.client.login(username="viewer", password="pass")
+        resp = self.client.get(reverse("band:coverage_risk"), {"n": "999999"})
+        self.assertEqual(resp.context["lookback"], 200)
