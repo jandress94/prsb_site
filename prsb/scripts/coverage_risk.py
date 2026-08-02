@@ -108,7 +108,7 @@ def _score_part(song_part: SongPart, assignments: list, rates: dict, d: int) -> 
         if existing is None or contribution > existing:
             best_contribution_by_member[assignment.member_id] = contribution
 
-    effective_coverage = max(best_contribution_by_member.values(), default=0.0)
+    effective_coverage = sum(best_contribution_by_member.values())
     risk = 1 / (effective_coverage + RISK_EPSILON)
     return PartRiskRow(
         song_part=song_part,
@@ -118,12 +118,19 @@ def _score_part(song_part: SongPart, assignments: list, rates: dict, d: int) -> 
     )
 
 
-def _unassigned_members(song: Song, assigned_member_ids: set) -> list:
+def _active_members() -> list:
     return list(
         BandMember.objects.filter(user__is_active=True)
-        .exclude(user_id__in=assigned_member_ids)
+        .select_related('user')
         .order_by('user__first_name', 'user__last_name')
     )
+
+
+def _unassigned_members(active_members: list, assigned_member_ids: set) -> list:
+    return [
+        member for member in active_members
+        if member.user_id not in assigned_member_ids
+    ]
 
 
 def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
@@ -148,6 +155,7 @@ def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
         assigned_member_ids_by_song.setdefault(song_id, set()).add(member_id)
 
     songs = Song.objects.filter(in_gig_rotation=True).prefetch_related('parts')
+    active_members = _active_members()
 
     song_rows = []
     for song in songs:
@@ -168,7 +176,7 @@ def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
             worst_part_effective_coverage = 0.0
             song_risk = 1 / RISK_EPSILON
 
-        unassigned = _unassigned_members(song, assigned_member_ids_by_song.get(song.id, set()))
+        unassigned = _unassigned_members(active_members, assigned_member_ids_by_song.get(song.id, set()))
 
         song_rows.append(SongRiskRow(
             song=song,

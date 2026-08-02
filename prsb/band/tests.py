@@ -336,6 +336,23 @@ class CoverageRiskScoringTestCase(TestCase):
         self.assertAlmostEqual(lead.effective_coverage, 1.0)
         self.assertEqual(len(lead.coverers), 2)
 
+    def test_effective_coverage_sums_contributions_across_members(self):
+        gig = self._past_gig(1)
+        GigAttendance.objects.create(gig=gig, member=self.alice, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=gig, member=self.bob, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=self.bob, song_part=self.part_lead, instrument=self.bass,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
+        self.assertAlmostEqual(lead.effective_coverage, 2.0)
+        self.assertEqual(len(lead.coverers), 2)
+
     def test_member_contributes_to_multiple_parts(self):
         gig = self._past_gig(1)
         GigAttendance.objects.create(gig=gig, member=self.alice, status=GigAttendance.AVAILABLE)
