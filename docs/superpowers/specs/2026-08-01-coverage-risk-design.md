@@ -120,6 +120,10 @@ Pure helper (e.g. `prsb/band/coverage_risk.py` or `prsb/scripts/coverage_risk.py
 
 Scores are **computed on request** — no new tables for risk scores.
 
+### Instruments excluded from coverage risk
+
+`Instrument.include_in_coverage_risk` (`BooleanField`, default `True`). When `False` (e.g. Drumset for Engine Room), assignments on that instrument are ignored by Coverage Risk. Parts that only use excluded instruments are omitted from the report entirely (not treated as uncovered). Mixed parts only count coverers on included instruments.
+
 ### Views / URLs
 
 | Path | Purpose |

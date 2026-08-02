@@ -36,7 +36,12 @@ admin.site.register(BandMember, BandMemberAdmin)
 
 
 class InstrumentAdmin(OrderedModelAdmin):
-    list_display = ('name', 'move_up_down_links')
+    list_display = (
+        'name',
+        'include_in_gig_song_count',
+        'include_in_coverage_risk',
+        'move_up_down_links',
+    )
 
 admin.site.register(Instrument, InstrumentAdmin)
 

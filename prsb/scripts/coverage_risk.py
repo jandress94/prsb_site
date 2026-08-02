@@ -88,10 +88,21 @@ def _get_rate(rates: dict, member_id, d: int) -> float:
     return rates.get(member_id, 0.0)
 
 
-def _score_part(song_part: SongPart, assignments: list, rates: dict, d: int) -> PartRiskRow:
+def _score_part(song_part: SongPart, assignments: list, rates: dict, d: int) -> PartRiskRow | None:
+    """Score a part for coverage risk.
+
+    Returns None when every assignment on the part uses an instrument with
+    ``include_in_coverage_risk=False`` (e.g. Engine Room / Drumset), so the
+    part is omitted from the report rather than treated as uncovered.
+    Parts with no assignments at all are still scored as uncovered.
+    """
+    included = [a for a in assignments if a.instrument.include_in_coverage_risk]
+    if assignments and not included:
+        return None
+
     coverers = []
     best_contribution_by_member = {}
-    for assignment in assignments:
+    for assignment in included:
         weight = _READINESS_WEIGHT.get(assignment.performance_readiness)
         if weight is None:
             continue
@@ -163,8 +174,10 @@ def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
     for song in songs:
         parts = list(song.parts.all())
         part_rows = [
-            _score_part(part, assignments_by_song_part.get(part.id, []), rates, d)
+            row
             for part in parts
+            if (row := _score_part(part, assignments_by_song_part.get(part.id, []), rates, d))
+            is not None
         ]
         part_rows.sort(key=lambda p: p.risk, reverse=True)
 
@@ -173,10 +186,16 @@ def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
             worst_part_name = worst.song_part.name
             worst_part_effective_coverage = worst.effective_coverage
             song_risk = worst.risk
-        else:
+        elif not parts:
+            # Song has no parts defined at all.
             worst_part_name = ""
             worst_part_effective_coverage = 0.0
             song_risk = 1 / RISK_EPSILON
+        else:
+            # Only excluded-instrument parts (e.g. Engine Room / Drumset) — not fragile.
+            worst_part_name = ""
+            worst_part_effective_coverage = 0.0
+            song_risk = 0.0
 
         unassigned = _unassigned_members(active_members, assigned_member_ids_by_song.get(song.id, set()))
 

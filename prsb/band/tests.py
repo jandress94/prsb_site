@@ -415,6 +415,47 @@ class CoverageRiskScoringTestCase(TestCase):
         member_names = {c.member.user.username for c in lead.coverers}
         self.assertNotIn("cr_inactive", member_names)
 
+    def test_instrument_excluded_from_coverage_risk_omits_part(self):
+        drumset = Instrument.objects.create(
+            name="Drumset", order=2, include_in_coverage_risk=False,
+        )
+        engine = SongPart.objects.create(song=self.song, name="Engine Room")
+        PartAssignment.objects.create(
+            member=self.alice, song_part=engine, instrument=drumset,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        song = next(s for s in report.songs if s.song.id == self.song.id)
+        part_names = {p.song_part.name for p in song.parts}
+        self.assertNotIn("Engine Room", part_names)
+        self.assertIn("Lead", part_names)
+        self.assertEqual(song.worst_part_name, "Bass")  # uncovered pan part
+
+    def test_excluded_instrument_does_not_count_toward_coverage(self):
+        """If a part mixes included + excluded instruments, only included count."""
+        drumset = Instrument.objects.create(
+            name="Drumset", order=2, include_in_coverage_risk=False,
+        )
+        PartAssignment.objects.create(
+            member=self.alice, song_part=self.part_lead, instrument=self.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=self.bob, song_part=self.part_lead, instrument=drumset,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        report = get_coverage_risk(lookback=10)
+        lead = next(
+            p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id
+        )
+        self.assertAlmostEqual(lead.effective_coverage, 1.0)
+        self.assertEqual(len(lead.coverers), 1)
+        self.assertEqual(lead.coverers[0].member.user.username, "cr_alice")
+
 
 class CoverageRiskViewsTestCase(TestCase):
     @classmethod
