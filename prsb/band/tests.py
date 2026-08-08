@@ -490,3 +490,87 @@ class CoverageRiskViewsTestCase(TestCase):
         self.client.login(username="viewer", password="pass")
         resp = self.client.get(reverse("band:coverage_risk"), {"n": "999999"})
         self.assertEqual(resp.context["lookback"], 200)
+
+
+class GigListPastPaginationTestCase(TestCase):
+    def _past_gig(self, days_ago, name=None):
+        start = timezone.now() - timedelta(days=days_ago)
+        return Gig.objects.create(
+            name=name or f"Past-{days_ago}",
+            start_datetime=start,
+            end_datetime=start + timedelta(hours=2),
+        )
+
+    def _upcoming_gig(self, days_ahead, name=None):
+        start = timezone.now() + timedelta(days=days_ahead)
+        return Gig.objects.create(
+            name=name or f"Upcoming-{days_ahead}",
+            start_datetime=start,
+            end_datetime=start + timedelta(hours=2),
+        )
+
+    def test_first_page_has_at_most_ten_past_gigs(self):
+        for i in range(1, 16):
+            self._past_gig(i, name=f"P{i}")
+        self._upcoming_gig(1, name="U1")
+
+        resp = self.client.get(reverse("band:gig_list"))
+        self.assertEqual(resp.status_code, 200)
+        past = list(resp.context["past_gigs"])
+        self.assertEqual(len(past), 10)
+        # Newest past first (days_ago=1 … 10)
+        self.assertEqual([g.name for g in past], [f"P{i}" for i in range(1, 11)])
+        upcoming = list(resp.context["upcoming_gigs"])
+        self.assertEqual([g.name for g in upcoming], ["U1"])
+        self.assertEqual(resp.context["page_obj"].number, 1)
+        self.assertEqual(resp.context["page_obj"].paginator.num_pages, 2)
+
+    def test_page_two_returns_remaining_past_gigs(self):
+        for i in range(1, 16):
+            self._past_gig(i, name=f"P{i}")
+
+        resp = self.client.get(reverse("band:gig_list"), {"page": "2"})
+        self.assertEqual(resp.status_code, 200)
+        past = list(resp.context["past_gigs"])
+        self.assertEqual([g.name for g in past], [f"P{i}" for i in range(11, 16)])
+        self.assertEqual(resp.context["page_obj"].number, 2)
+
+    def test_invalid_page_still_returns_200(self):
+        for i in range(1, 12):
+            self._past_gig(i, name=f"P{i}")
+
+        for bad in ("999", "abc", "-1", "0"):
+            with self.subTest(page=bad):
+                resp = self.client.get(reverse("band:gig_list"), {"page": bad})
+                self.assertEqual(resp.status_code, 200)
+                self.assertIn("page_obj", resp.context)
+                self.assertTrue(1 <= resp.context["page_obj"].number <= 2)
+
+    def test_pagination_controls_when_multiple_pages(self):
+        for i in range(1, 12):
+            self._past_gig(i, name=f"P{i}")
+
+        resp = self.client.get(reverse("band:gig_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Previous", count=0)  # page 1: no Previous
+        self.assertContains(resp, "Next")
+        self.assertContains(resp, 'href="?page=2"')
+        # Current page is not a link to itself as ?page=1 in a way that duplicates;
+        # at minimum page 2 link exists and "1" appears as current.
+        self.assertContains(resp, "<strong>1</strong>")
+
+        resp2 = self.client.get(reverse("band:gig_list"), {"page": "2"})
+        self.assertContains(resp2, "Previous")
+        self.assertContains(resp2, 'href="?page=1"')
+        self.assertContains(resp2, "Next", count=0)
+        self.assertContains(resp2, "<strong>2</strong>")
+
+    def test_no_pagination_controls_when_single_page(self):
+        for i in range(1, 6):
+            self._past_gig(i, name=f"P{i}")
+
+        resp = self.client.get(reverse("band:gig_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Previous")
+        self.assertNotContains(resp, "Next")
+        self.assertNotContains(resp, 'href="?page=')

@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.paginator import Paginator
 from django.db.models import Exists, OuterRef, Subquery
 from django import forms
 from django.db import connection
@@ -301,8 +302,18 @@ class GigListView(generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['upcoming_gigs'] = Gig.objects.filter(end_datetime__gte=timezone.now()).order_by('start_datetime')
-        context['past_gigs'] = Gig.objects.filter(end_datetime__lt=timezone.now())
+        context['upcoming_gigs'] = Gig.objects.filter(
+            end_datetime__gte=timezone.now()
+        ).order_by('start_datetime')
+        past_qs = Gig.objects.filter(
+            end_datetime__lt=timezone.now()
+        ).order_by('-start_datetime', '-pk')
+        paginator = Paginator(past_qs, 10)
+        page_obj = paginator.get_page(self.request.GET.get('page'))
+        context['paginator'] = paginator
+        context['page_obj'] = page_obj
+        context['is_paginated'] = page_obj.has_other_pages()
+        context['past_gigs'] = page_obj.object_list
         return context
 
 
