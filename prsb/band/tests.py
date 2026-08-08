@@ -545,3 +545,32 @@ class GigListPastPaginationTestCase(TestCase):
                 self.assertEqual(resp.status_code, 200)
                 self.assertIn("page_obj", resp.context)
                 self.assertTrue(1 <= resp.context["page_obj"].number <= 2)
+
+    def test_pagination_controls_when_multiple_pages(self):
+        for i in range(1, 12):
+            self._past_gig(i, name=f"P{i}")
+
+        resp = self.client.get(reverse("band:gig_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Previous", count=0)  # page 1: no Previous
+        self.assertContains(resp, "Next")
+        self.assertContains(resp, 'href="?page=2"')
+        # Current page is not a link to itself as ?page=1 in a way that duplicates;
+        # at minimum page 2 link exists and "1" appears as current.
+        self.assertContains(resp, "<strong>1</strong>")
+
+        resp2 = self.client.get(reverse("band:gig_list"), {"page": "2"})
+        self.assertContains(resp2, "Previous")
+        self.assertContains(resp2, 'href="?page=1"')
+        self.assertContains(resp2, "Next", count=0)
+        self.assertContains(resp2, "<strong>2</strong>")
+
+    def test_no_pagination_controls_when_single_page(self):
+        for i in range(1, 6):
+            self._past_gig(i, name=f"P{i}")
+
+        resp = self.client.get(reverse("band:gig_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Previous")
+        self.assertNotContains(resp, "Next")
+        self.assertNotContains(resp, 'href="?page=')
