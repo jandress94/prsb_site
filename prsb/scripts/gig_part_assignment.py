@@ -24,6 +24,28 @@ class ScoringConfig:
     ASSIGNMENT_PENALTY_PER_SONG = 0.0001
     ASSIGNMENT_WEIGHT_RANDOM = 0.000001
 
+    # Missing parts dominate the optimizer's total possible instrument reward.
+    MISSING_PART_PENALTY = SCORE_RANGE
+
+    # Missing-part bands do not overlap: instrument fit can move a score by at most 10 points,
+    # while each missing part costs 15 points.
+    MISSING_PART_SCORE_PENALTY = 15
+    INSTRUMENT_SCORE_RANGE = 10
+
+
+def get_score(num_missing_parts: int, instrument_fit: float) -> float:
+    """Score a song in non-overlapping missing-part bands.
+
+    Instrument fit is the fraction of the inverse-quantity instrument reward earned. It only
+    positions a song within its band, so one fewer missing part always produces a higher score.
+    """
+    fit = min(max(instrument_fit, 0.0), 1.0)
+    return (
+        ScoringConfig.SCORE_RANGE
+        - num_missing_parts * ScoringConfig.MISSING_PART_SCORE_PENALTY
+        - (1 - fit) * ScoringConfig.INSTRUMENT_SCORE_RANGE
+    )
+
 
 class GigPartAssignment:
     def __init__(self, song: Song, part_assignments: list[PartAssignment], score: float,
@@ -41,6 +63,10 @@ class GigPartAssignment:
         played_instruments = Counter(pa.instrument for pa in part_assignments)
         remaining_instrument_counts = {gi.instrument: gi.gig_quantity - played_instruments[gi.instrument] for gi in gig_instruments}
         self.unplayed_instruments = {i: c for i, c in remaining_instrument_counts.items() if c != 0}
+
+    @property
+    def is_fully_covered(self) -> bool:
+        return not self.unplayed_parts
 
 
 def _partition_overrides(part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignmentOverride], set[tuple]]:
@@ -156,11 +182,18 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     # The fewer of an instrument there are, the more we would want to put members there.
     #
     # The last variables are there to catch when no one is assigned to a particular part.
-    # When we use one of these variables, the coefficient is MISSING_PART_PENALTY / num_parts.
+    # Each of those costs MISSING_PART_PENALTY, which is larger than the total instrument reward
+    # available for the song, so covering a part always beats improving instrument usage.
     ##########################################################################################
     c_instrument = np.zeros(num_vars)
     for instrument, instrument_indices in instruments.items():
-        c_instrument[instrument_indices] = -ScoringConfig.SCORE_RANGE / 2 / len(instrument_to_count_map) / instrument_to_count_map[instrument]
+        c_instrument[instrument_indices] = (
+            -ScoringConfig.SCORE_RANGE
+            / 2
+            * ScoringConfig.ASSIGNMENT_WEIGHT_INSTRUMENT
+            / len(instrument_to_count_map)
+            / instrument_to_count_map[instrument]
+        )
 
     c_random = ScoringConfig.ASSIGNMENT_WEIGHT_RANDOM * np.random.random(num_vars)
     c_random[num_assignments:] = 0
@@ -170,7 +203,7 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
         c_per_song_penalty[member_indices] += ScoringConfig.ASSIGNMENT_PENALTY_PER_SONG * member_song_counts[member]**2
 
     c_missing_part_penalty = np.zeros(num_vars)
-    c_missing_part_penalty[-num_parts:] = ScoringConfig.SCORE_RANGE / num_parts / 2
+    c_missing_part_penalty[num_assignments + num_overrides:] = ScoringConfig.MISSING_PART_PENALTY
 
     c = c_instrument + c_random + c_per_song_penalty + c_missing_part_penalty
 
@@ -200,10 +233,14 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     gig_part_assignments = list(itertools.compress(all_assignments + overrides_as_part_assignments, result.x))
     gig_part_assignments = sorted(gig_part_assignments, key=lambda gpa: (gpa.song_part._order, gpa.member.user.get_full_name()))
 
-    score = sum(itertools.compress(c_instrument + c_missing_part_penalty, result.x))
-    score = ScoringConfig.SCORE_RANGE / 2 - score
+    # c_instrument is negative and reaches this magnitude when every instrument slot is filled.
+    max_instrument_reward = ScoringConfig.SCORE_RANGE / 2 * ScoringConfig.ASSIGNMENT_WEIGHT_INSTRUMENT
+    instrument_fit = -sum(itertools.compress(c_instrument, result.x)) / max_instrument_reward
 
-    return gig_part_assignments, score
+    covered_parts = {pa.song_part for pa in gig_part_assignments}
+    num_missing_parts = sum(1 for part in part_list if part not in covered_parts)
+
+    return gig_part_assignments, get_score(num_missing_parts, instrument_fit)
 
 
 def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignment], list[GigPartAssignment], Counter]:

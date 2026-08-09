@@ -105,6 +105,14 @@
 
     <h2>Song Recommendations</h2>
     {% for gpa in gig_part_assignments_recs %}
+        {% ifchanged gpa.is_fully_covered %}
+            {% if gpa.is_fully_covered %}
+                <h3 class="recommendation-group">All Parts Covered</h3>
+            {% else %}
+                <h3 class="recommendation-group">Missing Parts</h3>
+            {% endif %}
+        {% endifchanged %}
+
         <details>
             <summary>{{ gpa.song.title }} ({{ gpa.score|floatformat:2 }})</summary>
 

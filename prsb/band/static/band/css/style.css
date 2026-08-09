@@ -118,6 +118,13 @@ tr.error, ul.errorlist {
     background-color: #F6D7C5;
 }
 
+/* Song recommendation groups */
+h3.recommendation-group {
+    border-top: 3px solid #0D283C;
+    padding-top: 10px;
+    margin-top: 25px;
+}
+
 /* Forms */
 form {
     margin: 20px 0;
