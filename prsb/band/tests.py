@@ -12,9 +12,101 @@ from band.models import (
 )
 from types import SimpleNamespace
 
-from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage
+from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage, get_score
 from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
 from band.views import GigPartAssignmentOverrideForm
+
+
+class GigRecommendationScoreTestCase(TestCase):
+    def test_fewer_missing_parts_always_scores_higher(self):
+        for missing_parts in range(10):
+            worst_score = get_score(missing_parts, instrument_fit=0)
+            best_next_score = get_score(missing_parts + 1, instrument_fit=1)
+
+            self.assertGreater(worst_score, best_next_score)
+
+    def test_scarcer_instrument_fit_scores_higher_within_band(self):
+        lower_fit = get_score(num_missing_parts=2, instrument_fit=0.25)
+        higher_fit = get_score(num_missing_parts=2, instrument_fit=0.75)
+
+        self.assertGreater(higher_fit, lower_fit)
+
+    def test_perfect_assignment_scores_100(self):
+        self.assertEqual(get_score(num_missing_parts=0, instrument_fit=1), 100)
+
+    def test_instrument_fit_is_clamped(self):
+        self.assertEqual(
+            get_score(num_missing_parts=1, instrument_fit=-1),
+            get_score(num_missing_parts=1, instrument_fit=0),
+        )
+        self.assertEqual(
+            get_score(num_missing_parts=1, instrument_fit=2),
+            get_score(num_missing_parts=1, instrument_fit=1),
+        )
+
+
+class GigRecommendationGroupingTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.drums = Instrument.objects.create(name="Drums", order=0)
+        cls.guitar = Instrument.objects.create(name="Guitar", order=1)
+
+        cls.alice = User.objects.create_user(username="group_alice", first_name="Alice", last_name="Smith")
+        cls.bob = User.objects.create_user(username="group_bob", first_name="Bob", last_name="Jones")
+
+        cls.gig = Gig.objects.create(
+            name="Grouping Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        GigInstrument.objects.create(gig=cls.gig, instrument=cls.drums, gig_quantity=1)
+        GigInstrument.objects.create(gig=cls.gig, instrument=cls.guitar, gig_quantity=1)
+
+        for member in BandMember.objects.all():
+            GigAttendance.objects.create(gig=cls.gig, member=member, status=GigAttendance.AVAILABLE)
+
+        covered_song = Song.objects.create(title="Covered Song", in_gig_rotation=True)
+        covered_drums = SongPart.objects.create(song=covered_song, name="Drums Part")
+        covered_guitar = SongPart.objects.create(song=covered_song, name="Guitar Part")
+        PartAssignment.objects.create(
+            member=cls.alice.bandmember,
+            song_part=covered_drums,
+            instrument=cls.drums,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=cls.bob.bandmember,
+            song_part=covered_guitar,
+            instrument=cls.guitar,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+
+        incomplete_song = Song.objects.create(title="Incomplete Song", in_gig_rotation=True)
+        incomplete_drums = SongPart.objects.create(song=incomplete_song, name="Drums Part")
+        SongPart.objects.create(song=incomplete_song, name="Nobody Plays This Part")
+        PartAssignment.objects.create(
+            member=cls.alice.bandmember,
+            song_part=incomplete_drums,
+            instrument=cls.drums,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+
+    def test_recommendations_are_grouped_by_part_coverage(self):
+        response = self.client.get(reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
+        content = response.content.decode()
+
+        self.assertContains(response, "All Parts Covered")
+        self.assertContains(response, "Missing Parts")
+        self.assertLess(content.index("All Parts Covered"), content.index("Missing Parts"))
+        self.assertLess(content.index("Covered Song"), content.index("Missing Parts"))
+        self.assertLess(content.index("Missing Parts"), content.index("Incomplete Song"))
+
+    def test_group_heading_renders_once_per_group(self):
+        response = self.client.get(reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
+        content = response.content.decode()
+
+        self.assertEqual(content.count("All Parts Covered"), 1)
+        self.assertEqual(content.count("Missing Parts"), 1)
 
 
 class GigPartAssignmentOverrideTestCase(TestCase):
