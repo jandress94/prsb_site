@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -666,3 +667,59 @@ class GigListPastPaginationTestCase(TestCase):
         self.assertNotContains(resp, "Previous")
         self.assertNotContains(resp, "Next")
         self.assertNotContains(resp, 'href="?page=')
+
+
+class SoloFieldsTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.song = Song.objects.create(title="Solo Fields Song", in_gig_rotation=True)
+        cls.solo_part = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
+        cls.plain_part = SongPart.objects.create(song=cls.song, name="Pad", has_solo=False)
+        cls.trumpet = Instrument.objects.create(name="Trumpet SoloFields", order=0)
+        cls.user = User.objects.create_user(username="solo_fields_user", first_name="Sam", last_name="Solo")
+
+    def test_defaults_are_false(self):
+        part = SongPart.objects.create(song=self.song, name="Default Part")
+        self.assertFalse(part.has_solo)
+        assignment = PartAssignment(
+            member=self.user.bandmember,
+            song_part=self.solo_part,
+            instrument=self.trumpet,
+        )
+        self.assertFalse(assignment.can_solo)
+
+    def test_can_solo_rejected_when_part_has_no_solo(self):
+        assignment = PartAssignment(
+            member=self.user.bandmember,
+            song_part=self.plain_part,
+            instrument=self.trumpet,
+            can_solo=True,
+        )
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    def test_can_solo_allowed_when_part_has_solo(self):
+        assignment = PartAssignment(
+            member=self.user.bandmember,
+            song_part=self.solo_part,
+            instrument=self.trumpet,
+            can_solo=True,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        assignment.full_clean()
+        assignment.save()
+        self.assertTrue(PartAssignment.objects.get(pk=assignment.pk).can_solo)
+
+    def test_clearing_has_solo_clears_can_solo(self):
+        assignment = PartAssignment.objects.create(
+            member=self.user.bandmember,
+            song_part=self.solo_part,
+            instrument=self.trumpet,
+            can_solo=True,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        self.solo_part.has_solo = False
+        self.solo_part.save()
+        assignment.refresh_from_db()
+        self.assertFalse(assignment.can_solo)
+        self.assertFalse(SongPart.objects.get(pk=self.solo_part.pk).has_solo)

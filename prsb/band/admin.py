@@ -72,8 +72,8 @@ class PartAssignmentAdmin(admin.ModelAdmin):
     def song_title(self, obj: PartAssignment):
         return obj.song_part.song
 
-    list_display = ['member', 'song_title', 'song_part', 'instrument']
-    list_filter = [MemberUserFilter, 'song_part__song', 'song_part', 'instrument']
+    list_display = ['member', 'song_title', 'song_part', 'instrument', 'can_solo']
+    list_filter = [MemberUserFilter, 'song_part__song', 'song_part', 'instrument', 'can_solo', 'song_part__has_solo']
 admin.site.register(PartAssignment, PartAssignmentAdmin)
 
 
