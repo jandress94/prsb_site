@@ -1198,3 +1198,76 @@ class DrumKitCoverInjectionTestCase(TestCase):
         )
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].member, self.carlos.bandmember)
+
+
+class DrumKitCoverGigAssignmentTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.song = Song.objects.create(title="Kit Gig Song", in_gig_rotation=True)
+        cls.engine = SongPart.objects.create(song=cls.song, name="Engine Room")
+        cls.lead_part = SongPart.objects.create(song=cls.song, name="Lead")
+
+        cls.kit = Instrument.objects.create(
+            name="KitGig Drum Set", order=0, is_drum_kit_cover_instrument=True,
+            include_in_gig_song_count=True,
+        )
+        cls.lead = Instrument.objects.create(name="KitGig Lead", order=1)
+
+        cls.ben = User.objects.create_user(username="kitgig_ben", first_name="Ben", last_name="G")
+        cls.jansen = User.objects.create_user(username="kitgig_jansen", first_name="Jansen", last_name="G")
+        cls.carlos = User.objects.create_user(username="kitgig_carlos", first_name="Carlos", last_name="G")
+        cls.lead_player = User.objects.create_user(username="kitgig_lead", first_name="Lead", last_name="G")
+
+        PartAssignment.objects.create(
+            member=cls.ben.bandmember, song_part=cls.engine, instrument=cls.kit,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=cls.jansen.bandmember, song_part=cls.lead_part, instrument=cls.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        PartAssignment.objects.create(
+            member=cls.lead_player.bandmember, song_part=cls.lead_part, instrument=cls.lead,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+
+        DrumKitCoverPlayer.objects.create(member=cls.jansen.bandmember, priority=1)
+        DrumKitCoverPlayer.objects.create(member=cls.carlos.bandmember, priority=2)
+
+        cls.gig = Gig.objects.create(
+            name="Kit Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        GigInstrument.objects.create(gig=cls.gig, instrument=cls.kit, gig_quantity=1)
+        GigInstrument.objects.create(gig=cls.gig, instrument=cls.lead, gig_quantity=2)
+
+        for user in (cls.jansen, cls.carlos, cls.lead_player):
+            GigAttendance.objects.create(
+                gig=cls.gig, member=user.bandmember, status=GigAttendance.AVAILABLE,
+            )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.ben.bandmember, status=GigAttendance.UNAVAILABLE,
+        )
+        GigSetlistEntry.objects.create(gig=cls.gig, song=cls.song)
+
+    def test_jansen_covers_kit_when_ben_unavailable(self):
+        setlist, _, _ = get_gig_part_assignments(self.gig, [])
+        self.assertEqual(len(setlist), 1)
+        kit_players = [
+            pa for pa in setlist[0].part_assignments if pa.instrument_id == self.kit.id
+        ]
+        self.assertEqual(len(kit_players), 1)
+        self.assertEqual(kit_players[0].member, self.jansen.bandmember)
+        self.assertEqual(len(setlist[0].unplayed_parts), 0)
+
+    def test_listed_ben_used_when_available(self):
+        GigAttendance.objects.filter(gig=self.gig, member=self.ben.bandmember).update(
+            status=GigAttendance.AVAILABLE,
+        )
+        setlist, _, _ = get_gig_part_assignments(self.gig, [])
+        kit_players = [
+            pa for pa in setlist[0].part_assignments if pa.instrument_id == self.kit.id
+        ]
+        self.assertEqual(len(kit_players), 1)
+        self.assertEqual(kit_players[0].member, self.ben.bandmember)

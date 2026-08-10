@@ -12,7 +12,8 @@ from collections import Counter
 
 django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
-    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType, Instrument
+    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType, Instrument, \
+    DrumKitCoverPlayer
 
 
 RAND_SEED = 0
@@ -356,6 +357,25 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
     song_to_part_assignments = {s: list(p) for s, p in groupby(all_part_assignments, lambda pa: pa.song_part.song)}
     song_to_overrides = {s: list(o) for s, o in groupby(part_assignment_overrides, lambda pao: pao.song_part.song)}
 
+    kit_instrument = (
+        Instrument.objects.filter(is_drum_kit_cover_instrument=True).order_by("order").first()
+    )
+    gig_has_kit = kit_instrument is not None and any(
+        gi.instrument_id == kit_instrument.id for gi in gig_instruments
+    )
+    cover_players = list(DrumKitCoverPlayer.objects.select_related("member__user")) if gig_has_kit else []
+    available_member_set = set(attendees)
+
+    # Prefetch kit repertoire for rotation songs (no attendance filter)
+    kit_repertoire_by_song = {}
+    if gig_has_kit:
+        kit_pas = PartAssignment.objects.filter(
+            instrument=kit_instrument,
+            song_part__song__in_gig_rotation=True,
+        ).select_related("member", "song_part", "instrument")
+        for pa in kit_pas:
+            kit_repertoire_by_song.setdefault(pa.song_part.song_id, []).append(pa)
+
     setlist_songs = {entry.song for entry in GigSetlistEntry.objects.filter(gig=gig, song__isnull=False)}
 
     song_counts_to_return = None
@@ -364,7 +384,21 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
         is_in_setlist = song in setlist_songs
         part_list = list(song.parts.all())
 
-        part_assignments, score = get_gig_song_part_assignments(part_list, list(attendee_part_assignments), gig_instruments, member_song_counts, song_to_overrides.get(song, []))
+        candidates = list(attendee_part_assignments)
+        if gig_has_kit:
+            injected = inject_drum_kit_cover_assignments(
+                song=song,
+                kit_instrument=kit_instrument,
+                available_members=available_member_set,
+                song_overrides=song_to_overrides.get(song, []),
+                cover_players=cover_players,
+                kit_repertoire=kit_repertoire_by_song.get(song.id, []),
+            )
+            candidates.extend(injected)
+
+        part_assignments, score = get_gig_song_part_assignments(
+            part_list, candidates, gig_instruments, member_song_counts, song_to_overrides.get(song, []),
+        )
         if part_assignments is None:
             # invalid constraints
             continue
