@@ -135,17 +135,20 @@ def inject_drum_kit_cover_assignments(
         return []
 
     min_priority = min(cover.priority for cover in eligible)
-    return [
-        PartAssignment(
+    injected = []
+    for cover in eligible:
+        if cover.priority != min_priority:
+            continue
+        assignment = PartAssignment(
             member=cover.member,
             song_part=attachment_part,
             instrument=kit_instrument,
             performance_readiness=PerformanceReadiness.READY,
             can_solo=False,
         )
-        for cover in eligible
-        if cover.priority == min_priority
-    ]
+        assignment.is_drum_kit_cover = True
+        injected.append(assignment)
+    return injected
 
 
 def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment],

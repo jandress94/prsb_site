@@ -1140,6 +1140,7 @@ class DrumKitCoverInjectionTestCase(TestCase):
         self.assertEqual(result[0].instrument, self.kit)
         self.assertEqual(result[0].performance_readiness, PerformanceReadiness.READY)
         self.assertFalse(result[0].pk)  # unsaved
+        self.assertTrue(result[0].is_drum_kit_cover)
 
     def test_not_playing_falls_through_to_next_tier(self):
         gig = Gig.objects.create(
@@ -1277,6 +1278,7 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
         ]
         self.assertEqual(len(kit_players), 1)
         self.assertEqual(kit_players[0].member, self.jansen.bandmember)
+        self.assertTrue(kit_players[0].is_drum_kit_cover)
         self.assertEqual(len(setlist[0].unplayed_parts), 0)
 
     def test_listed_ben_used_when_available(self):
@@ -1289,6 +1291,17 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
         ]
         self.assertEqual(len(kit_players), 1)
         self.assertEqual(kit_players[0].member, self.ben.bandmember)
+        self.assertFalse(getattr(kit_players[0], "is_drum_kit_cover", False))
+
+    def test_gig_part_assignments_mark_cover_member(self):
+        response = self.client.get(
+            reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
+        )
+        self.assertContains(
+            response,
+            'Jansen G <span class="cover-marker" title="Drum kit cover">(cover)</span>',
+            html=False,
+        )
 
     def test_listed_player_assigned_to_lead_does_not_block_cover(self):
         GigAttendance.objects.filter(gig=self.gig, member=self.ben.bandmember).update(
