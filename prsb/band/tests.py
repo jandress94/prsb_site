@@ -46,6 +46,142 @@ class GigRecommendationScoreTestCase(TestCase):
         )
 
 
+class SoloAwareAssignmentTestCase(TestCase):
+    """Optimizer prefers can_solo on has_solo parts without changing score formula."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.trumpet = Instrument.objects.create(name="Trumpet SoloOpt", quantity=2, order=0)
+        cls.mellophone = Instrument.objects.create(name="Mellophone SoloOpt", quantity=1, order=1)
+
+        cls.alice = User.objects.create_user(username="solo_opt_alice", first_name="Alice", last_name="A")
+        cls.bob = User.objects.create_user(username="solo_opt_bob", first_name="Bob", last_name="B")
+        cls.carol = User.objects.create_user(username="solo_opt_carol", first_name="Carol", last_name="C")
+
+    def _gig_with_instruments(self, instruments_and_qty):
+        gig = Gig.objects.create(
+            name="Solo Opt Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        for instrument, qty in instruments_and_qty:
+            GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=qty)
+        for member in BandMember.objects.filter(user__username__startswith="solo_opt_"):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        return gig
+
+    def test_prefers_soloist_over_non_soloist_same_instrument(self):
+        song = Song.objects.create(title="Solo Prefer Song", in_gig_rotation=True)
+        lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
+        PartAssignment.objects.create(
+            member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=True,
+        )
+        PartAssignment.objects.create(
+            member=self.bob.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        gig = self._gig_with_instruments([(self.trumpet, 1)])
+        GigSetlistEntry.objects.create(gig=gig, song=song)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        players = setlist[0].part_assignments
+        self.assertEqual(len(players), 1)
+        self.assertEqual(players[0].member, self.alice.bandmember)
+
+    def test_covers_solo_part_with_non_soloist_when_needed(self):
+        song = Song.objects.create(title="Solo Fallback Song", in_gig_rotation=True)
+        lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
+        PartAssignment.objects.create(
+            member=self.bob.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        gig = self._gig_with_instruments([(self.trumpet, 1)])
+        GigSetlistEntry.objects.create(gig=gig, song=song)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        self.assertEqual(len(setlist[0].part_assignments), 1)
+        self.assertEqual(setlist[0].part_assignments[0].member, self.bob.bandmember)
+        self.assertEqual(setlist[0].unplayed_parts, set())
+
+    def test_solo_preference_beats_scarcer_instrument(self):
+        # Alice can solo on plentiful trumpet; Bob cannot solo on scarce mellophone.
+        song = Song.objects.create(title="Solo Vs Scarcity Song", in_gig_rotation=True)
+        lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
+        PartAssignment.objects.create(
+            member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=True,
+        )
+        PartAssignment.objects.create(
+            member=self.bob.bandmember, song_part=lead, instrument=self.mellophone,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        gig = self._gig_with_instruments([(self.trumpet, 2), (self.mellophone, 1)])
+        GigSetlistEntry.objects.create(gig=gig, song=song)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        lead_players = [
+            assignment for assignment in setlist[0].part_assignments
+            if assignment.song_part == lead
+        ]
+        self.assertIn(self.alice.bandmember, {assignment.member for assignment in lead_players})
+        alice_assignment = next(
+            assignment for assignment in lead_players
+            if assignment.member == self.alice.bandmember
+        )
+        self.assertEqual(alice_assignment.instrument, self.trumpet)
+
+    def test_covering_part_still_beats_solo_preference(self):
+        # Two parts. Alice is the only person who can cover Pad, and can also solo on Lead.
+        # Bob can cover Lead but cannot solo. Prefer covering both parts over putting Alice on Lead.
+        song = Song.objects.create(title="Cover Beats Solo Song", in_gig_rotation=True)
+        lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
+        pad = SongPart.objects.create(song=song, name="Pad", has_solo=False)
+        PartAssignment.objects.create(
+            member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=True,
+        )
+        PartAssignment.objects.create(
+            member=self.alice.bandmember, song_part=pad, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        PartAssignment.objects.create(
+            member=self.bob.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        gig = self._gig_with_instruments([(self.trumpet, 2)])
+        GigSetlistEntry.objects.create(gig=gig, song=song)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        gpa = setlist[0]
+        self.assertEqual(gpa.unplayed_parts, set())
+        by_part = {pa.song_part_id: pa.member for pa in gpa.part_assignments}
+        self.assertEqual(by_part[pad.id], self.alice.bandmember)
+        self.assertEqual(by_part[lead.id], self.bob.bandmember)
+
+    def test_song_score_ignores_solo_fields(self):
+        # Same coverage and instruments → same score whether can_solo is set or not.
+        song = Song.objects.create(title="Score Unchanged Song", in_gig_rotation=True)
+        lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
+        PartAssignment.objects.create(
+            member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        gig = self._gig_with_instruments([(self.trumpet, 1)])
+        GigSetlistEntry.objects.create(gig=gig, song=song)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        score_without = setlist[0].score
+
+        PartAssignment.objects.filter(song_part=lead).update(can_solo=True)
+        setlist2, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist2[0].score, score_without)
+
+
 class GigRecommendationGroupingTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):

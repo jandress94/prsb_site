@@ -202,10 +202,25 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     for member, member_indices in members.items():
         c_per_song_penalty[member_indices] += ScoringConfig.ASSIGNMENT_PENALTY_PER_SONG * member_song_counts[member]**2
 
-    c_missing_part_penalty = np.zeros(num_vars)
-    c_missing_part_penalty[num_assignments + num_overrides:] = ScoringConfig.MISSING_PART_PENALTY
+    # Soloist reward: beat the song's max instrument reward, but keep
+    # num_parts * soloist_reward < missing-part penalty so covering always wins.
+    max_instrument_reward = ScoringConfig.SCORE_RANGE / 2 * ScoringConfig.ASSIGNMENT_WEIGHT_INSTRUMENT
+    soloist_reward = max_instrument_reward + 1
+    missing_part_penalty = max(
+        ScoringConfig.MISSING_PART_PENALTY,
+        soloist_reward * max(num_parts, 1) + 1,
+    )
 
-    c = c_instrument + c_random + c_per_song_penalty + c_missing_part_penalty
+    c_soloist = np.zeros(num_vars)
+    for i, assignment in enumerate(all_assignments):
+        if assignment.can_solo and assignment.song_part.has_solo:
+            c_soloist[i] = -soloist_reward
+    # Override variables (indices num_assignments .. num_assignments+num_overrides-1) stay 0.
+
+    c_missing_part_penalty = np.zeros(num_vars)
+    c_missing_part_penalty[num_assignments + num_overrides:] = missing_part_penalty
+
+    c = c_instrument + c_random + c_per_song_penalty + c_soloist + c_missing_part_penalty
 
     ##########################################################################################
     # Other Settings
