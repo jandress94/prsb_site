@@ -220,6 +220,38 @@ class SoloAwareAssignmentTestCase(TestCase):
         self.assertEqual(setlist2[0].score, score_without)
 
 
+class GigPartAssignmentSoloMarkerTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.trumpet = Instrument.objects.create(name="Trumpet Marker", quantity=1, order=0)
+        cls.alice = User.objects.create_user(username="solo_marker_alice", first_name="Alice", last_name="M")
+        cls.song = Song.objects.create(title="Solo Marker Song", in_gig_rotation=True)
+        cls.lead = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
+        PartAssignment.objects.create(
+            member=cls.alice.bandmember,
+            song_part=cls.lead,
+            instrument=cls.trumpet,
+            performance_readiness=PerformanceReadiness.READY,
+            can_solo=True,
+        )
+        cls.gig = Gig.objects.create(
+            name="Solo Marker Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        GigInstrument.objects.create(gig=cls.gig, instrument=cls.trumpet, gig_quantity=1)
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.alice.bandmember, status=GigAttendance.AVAILABLE,
+        )
+        GigSetlistEntry.objects.create(gig=cls.gig, song=cls.song)
+
+    def test_gig_part_assignments_mark_solos(self):
+        response = self.client.get(
+            reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
+        )
+        self.assertContains(response, "solo-marker")
+
+
 class GigRecommendationGroupingTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
