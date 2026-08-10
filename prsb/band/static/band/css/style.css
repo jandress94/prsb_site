@@ -118,7 +118,8 @@ tr.error, ul.errorlist {
     background-color: #F6D7C5;
 }
 
-.solo-marker {
+.solo-marker,
+.cover-marker {
     font-size: 0.85em;
     font-style: italic;
     opacity: 0.85;

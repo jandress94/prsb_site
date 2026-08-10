@@ -779,7 +779,7 @@ class GigPartAssignmentByMemberView(generic.TemplateView):
         # 1-based song number by setlist order
         song_to_number = {gpa.song: i + 1 for i, gpa in enumerate(setlist_sorted)}
 
-        # Group by member: member -> list of (song_number, song_name, part, instrument) ordered by song number
+        # Group by member: member -> list of (song_number, song_name, part, instrument, is_cover)
         member_rows = {}
         for gpa in setlist_sorted:
             for pa in gpa.part_assignments:
@@ -788,6 +788,7 @@ class GigPartAssignmentByMemberView(generic.TemplateView):
                     gpa.song.title,
                     pa.song_part,
                     pa.instrument,
+                    getattr(pa, "is_drum_kit_cover", False),
                 )
                 member_rows.setdefault(pa.member, []).append(row)
 

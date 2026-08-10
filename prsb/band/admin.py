@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 
 from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument, \
-    GigPartAssignmentOverride, GigSetlistEntry, BandSpecialDate
+    GigPartAssignmentOverride, GigSetlistEntry, BandSpecialDate, DrumKitCoverPlayer
 
 
 class SongPartInline(admin.TabularInline):
@@ -40,10 +40,19 @@ class InstrumentAdmin(OrderedModelAdmin):
         'name',
         'include_in_gig_song_count',
         'include_in_coverage_risk',
+        'is_drum_kit_cover_instrument',
         'move_up_down_links',
     )
 
 admin.site.register(Instrument, InstrumentAdmin)
+
+
+class DrumKitCoverPlayerAdmin(admin.ModelAdmin):
+    list_display = ["member", "priority"]
+    list_filter = ["priority"]
+    ordering = ["priority"]
+
+admin.site.register(DrumKitCoverPlayer, DrumKitCoverPlayerAdmin)
 
 
 class MemberUserFilter(admin.SimpleListFilter):

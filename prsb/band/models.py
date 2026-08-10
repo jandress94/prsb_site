@@ -74,6 +74,19 @@ def update_profile_signal(sender, instance, created, **kwargs):
     instance.bandmember.save()
 
 
+class DrumKitCoverPlayer(models.Model):
+    member = models.OneToOneField(BandMember, on_delete=models.CASCADE)
+    priority = models.PositiveSmallIntegerField(
+        help_text="Lower number = preferred cover (e.g. 1 before 2).",
+    )
+
+    class Meta:
+        ordering = ["priority", "member__user__first_name", "member__user__last_name"]
+
+    def __str__(self):
+        return f"{self.member} (priority {self.priority})"
+
+
 class Instrument(OrderedModel):
     name = models.CharField(max_length=256)
     quantity = models.PositiveSmallIntegerField(default=1)
@@ -82,6 +95,11 @@ class Instrument(OrderedModel):
         default=True,
         help_text="If unchecked, assignments on this instrument are ignored by the Coverage Risk report "
                   "(e.g. Drumset / Engine Room, where any drummer can cover).",
+    )
+    is_drum_kit_cover_instrument = models.BooleanField(
+        default=False,
+        help_text="If checked, this instrument is the target for drum-kit cover fallbacks "
+                  "(expect exactly one instrument flagged).",
     )
 
     def __str__(self):

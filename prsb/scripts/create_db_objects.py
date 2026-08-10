@@ -8,7 +8,7 @@ django.setup()
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 
-from band.models import BandMember, Song, SongPart, Instrument, PartAssignment
+from band.models import BandMember, Song, SongPart, Instrument, PartAssignment, DrumKitCoverPlayer
 import pandas as pd
 import numpy as np
 
@@ -59,7 +59,8 @@ def get_instruments() -> list[Instrument]:
     for _, row in instruments_df.iterrows():
         instruments.append(Instrument(
             name=row.Instrument,
-            quantity=row.Count
+            quantity=row.Count,
+            is_drum_kit_cover_instrument=row.Instrument == "Drum Set",
         ))
 
     return instruments
@@ -155,6 +156,20 @@ def get_part_assignments(band_members: list[BandMember], song_parts: list[SongPa
     return part_assignments
 
 
+def get_drum_kit_cover_players(band_members: list[BandMember]) -> list[DrumKitCoverPlayer]:
+    cover_players_df = pd.read_csv('resources/data/DrumKitCoverPlayers.csv')
+    user_lookup = get_member_lookup(band_members)
+    cover_players = []
+
+    for _, row in cover_players_df.iterrows():
+        cover_players.append(DrumKitCoverPlayer(
+            member=user_lookup[row['First Name']],
+            priority=row['Priority'],
+        ))
+
+    return cover_players
+
+
 if __name__ == '__main__':
     songs = Song.objects.all()
     if len(songs) == 0:
@@ -203,5 +218,11 @@ if __name__ == '__main__':
             part_assignment.save()
     else:
         part_assignments = list(part_assignments)
+
+    drum_kit_cover_players = DrumKitCoverPlayer.objects.all()
+    if len(drum_kit_cover_players) == 0:
+        drum_kit_cover_players = get_drum_kit_cover_players(band_members)
+        for cover_player in drum_kit_cover_players:
+            cover_player.save()
 
 
