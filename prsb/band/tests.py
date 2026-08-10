@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from band.models import (
-    BandMember, Gig, GigAttendance, GigInstrument, GigPartAssignmentOverride,
+    BandMember, DrumKitCoverPlayer, Gig, GigAttendance, GigInstrument, GigPartAssignmentOverride,
     GigSetlistEntry, Instrument, OverrideType, PartAssignment, PerformanceReadiness,
     Song, SongPart,
 )
@@ -1055,3 +1055,28 @@ class PartAssignmentCanSoloFormTestCase(TestCase):
             "can_solo": True,
         })
         self.assertTrue(form.is_valid(), form.errors)
+
+
+class DrumKitCoverModelTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.kit = Instrument.objects.create(
+            name="KitCoverModel Drum Set", order=0, is_drum_kit_cover_instrument=True,
+        )
+        cls.other = Instrument.objects.create(name="KitCoverModel Congas", order=1)
+        cls.user = User.objects.create_user(
+            username="kit_cover_model_user", first_name="Kit", last_name="Cover",
+        )
+
+    def test_instrument_flag_default_false(self):
+        inst = Instrument.objects.create(name="KitCoverModel Default", order=2)
+        self.assertFalse(inst.is_drum_kit_cover_instrument)
+
+    def test_drum_kit_cover_player_unique_member_and_str(self):
+        row = DrumKitCoverPlayer.objects.create(
+            member=self.user.bandmember, priority=1,
+        )
+        self.assertEqual(str(row), "Kit Cover (priority 1)")
+        dup = DrumKitCoverPlayer(member=self.user.bandmember, priority=2)
+        with self.assertRaises(Exception):
+            dup.save()
