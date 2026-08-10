@@ -24,8 +24,10 @@ class ScoringConfig:
     ASSIGNMENT_PENALTY_PER_SONG = 0.0001
     ASSIGNMENT_WEIGHT_RANDOM = 0.000001
 
-    # Missing parts dominate the optimizer's total possible instrument reward.
+    # Floor for the per-solve penalty that dominates all lower-priority rewards.
     MISSING_PART_PENALTY = SCORE_RANGE
+    # A ready soloist must beat even the largest possible instrument-fit reward.
+    SOLOIST_REWARD_OVER_MAX_INSTRUMENT = 1
 
     # Missing-part bands do not overlap: instrument fit can move a score by at most 10 points,
     # while each missing part costs 15 points.
@@ -181,9 +183,9 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     # the coefficient is -1 / the number that instrument that is coming to the gig.
     # The fewer of an instrument there are, the more we would want to put members there.
     #
-    # The last variables are there to catch when no one is assigned to a particular part.
-    # Each of those costs MISSING_PART_PENALTY, which is larger than the total instrument reward
-    # available for the song, so covering a part always beats improving instrument usage.
+    # The last variables catch when no ready member is assigned to a particular part.
+    # Their per-solve penalty dominates every solo and instrument reward that could be earned
+    # instead, so covering a part always remains the optimizer's first priority.
     ##########################################################################################
     c_instrument = np.zeros(num_vars)
     for instrument, instrument_indices in instruments.items():
@@ -202,18 +204,26 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     for member, member_indices in members.items():
         c_per_song_penalty[member_indices] += ScoringConfig.ASSIGNMENT_PENALTY_PER_SONG * member_song_counts[member]**2
 
-    # Soloist reward: beat the song's max instrument reward, but keep
-    # num_parts * soloist_reward < missing-part penalty so covering always wins.
     max_instrument_reward = ScoringConfig.SCORE_RANGE / 2 * ScoringConfig.ASSIGNMENT_WEIGHT_INSTRUMENT
-    soloist_reward = max_instrument_reward + 1
+    soloist_reward = (
+        max_instrument_reward
+        + ScoringConfig.SOLOIST_REWARD_OVER_MAX_INSTRUMENT
+    )
+    # Nothing outranks covering a part: the penalty must exceed the largest combined
+    # solo + instrument reward the solver could earn by leaving one part empty.
+    max_concurrent_players = min(num_members, sum(instrument_to_count_map.values()))
     missing_part_penalty = max(
         ScoringConfig.MISSING_PART_PENALTY,
-        soloist_reward * max(num_parts, 1) + 1,
+        max_concurrent_players * soloist_reward + max_instrument_reward + 1,
     )
 
     c_soloist = np.zeros(num_vars)
     for i, assignment in enumerate(all_assignments):
-        if assignment.can_solo and assignment.song_part.has_solo:
+        if (
+            assignment.performance_readiness == PerformanceReadiness.READY
+            and assignment.can_solo
+            and assignment.song_part.has_solo
+        ):
             c_soloist[i] = -soloist_reward
     # Override variables (indices num_assignments .. num_assignments+num_overrides-1) stay 0.
 
