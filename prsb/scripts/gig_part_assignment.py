@@ -12,7 +12,7 @@ from collections import Counter
 
 django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
-    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType
+    PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType, Instrument
 
 
 RAND_SEED = 0
@@ -80,6 +80,70 @@ def _partition_overrides(part_assignment_overrides: list[GigPartAssignmentOverri
         else:
             assign_overrides.append(override)
     return assign_overrides, not_playing
+
+
+def inject_drum_kit_cover_assignments(
+    song: Song,
+    kit_instrument: Instrument | None,
+    available_members: set[BandMember] | set,
+    song_overrides: list[GigPartAssignmentOverride],
+    cover_players: list,
+    kit_repertoire: list[PartAssignment],
+) -> list[PartAssignment]:
+    if kit_instrument is None or not kit_repertoire:
+        return []
+
+    assign_overrides, not_playing = _partition_overrides(song_overrides)
+    assign_member_ids = {
+        override.member_id
+        for override in assign_overrides
+        if override.override_type == OverrideType.ASSIGN
+    }
+
+    attachment_parts = {pa.song_part for pa in kit_repertoire}
+    attachment_part = kit_repertoire[0].song_part
+    assert len(attachment_parts) == 1 or attachment_part in attachment_parts
+
+    kit_instrument_id = kit_instrument.pk
+    listed_repertoire_member_ids = {pa.member_id for pa in kit_repertoire}
+
+    listed_available = any(
+        pa.member in available_members
+        and pa.performance_readiness != PerformanceReadiness.NOT_READY
+        and (pa.member_id, pa.song_part_id, kit_instrument_id) not in not_playing
+        for pa in kit_repertoire
+    )
+    if listed_available:
+        return []
+
+    eligible = []
+    for cover in cover_players:
+        member = cover.member
+        if member not in available_members:
+            continue
+        if member.pk in assign_member_ids:
+            continue
+        if member.pk in listed_repertoire_member_ids:
+            continue
+        if (member.pk, attachment_part.pk, kit_instrument_id) in not_playing:
+            continue
+        eligible.append(cover)
+
+    if not eligible:
+        return []
+
+    min_priority = min(cover.priority for cover in eligible)
+    return [
+        PartAssignment(
+            member=cover.member,
+            song_part=attachment_part,
+            instrument=kit_instrument,
+            performance_readiness=PerformanceReadiness.READY,
+            can_solo=False,
+        )
+        for cover in eligible
+        if cover.priority == min_priority
+    ]
 
 
 def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment],
