@@ -103,13 +103,14 @@ def inject_drum_kit_cover_assignments(
 
     attachment_parts = {pa.song_part for pa in kit_repertoire}
     attachment_part = kit_repertoire[0].song_part
-    assert len(attachment_parts) == 1 or attachment_part in attachment_parts
+    assert len(attachment_parts) == 1
 
     kit_instrument_id = kit_instrument.pk
     listed_repertoire_member_ids = {pa.member_id for pa in kit_repertoire}
 
     listed_available = any(
         pa.member in available_members
+        and pa.member_id not in assign_member_ids
         and pa.performance_readiness != PerformanceReadiness.NOT_READY
         and (pa.member_id, pa.song_part_id, kit_instrument_id) not in not_playing
         for pa in kit_repertoire
@@ -372,7 +373,9 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
         kit_pas = PartAssignment.objects.filter(
             instrument=kit_instrument,
             song_part__song__in_gig_rotation=True,
-        ).select_related("member", "song_part", "instrument")
+        ).select_related("member", "song_part", "instrument").order_by(
+            "song_part___order", "pk",
+        )
         for pa in kit_pas:
             kit_repertoire_by_song.setdefault(pa.song_part.song_id, []).append(pa)
 

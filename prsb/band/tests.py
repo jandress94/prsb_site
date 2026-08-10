@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -1063,10 +1064,6 @@ class PartAssignmentCanSoloFormTestCase(TestCase):
 class DrumKitCoverModelTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.kit = Instrument.objects.create(
-            name="KitCoverModel Drum Set", order=0, is_drum_kit_cover_instrument=True,
-        )
-        cls.other = Instrument.objects.create(name="KitCoverModel Congas", order=1)
         cls.user = User.objects.create_user(
             username="kit_cover_model_user", first_name="Kit", last_name="Cover",
         )
@@ -1081,8 +1078,9 @@ class DrumKitCoverModelTestCase(TestCase):
         )
         self.assertEqual(str(row), "Kit Cover (priority 1)")
         dup = DrumKitCoverPlayer(member=self.user.bandmember, priority=2)
-        with self.assertRaises(Exception):
-            dup.save()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                dup.save()
 
 
 class DrumKitCoverInjectionTestCase(TestCase):
@@ -1099,6 +1097,7 @@ class DrumKitCoverInjectionTestCase(TestCase):
         cls.ben = User.objects.create_user(username="kit_ben", first_name="Ben", last_name="K")
         cls.jansen = User.objects.create_user(username="kit_jansen", first_name="Jansen", last_name="K")
         cls.carlos = User.objects.create_user(username="kit_carlos", first_name="Carlos", last_name="K")
+        cls.dario = User.objects.create_user(username="kit_dario", first_name="Dario", last_name="K")
 
         PartAssignment.objects.create(
             member=cls.ben.bandmember, song_part=cls.engine, instrument=cls.kit,
@@ -1112,6 +1111,7 @@ class DrumKitCoverInjectionTestCase(TestCase):
         DrumKitCoverPlayer.objects.create(member=cls.jansen.bandmember, priority=1)
         DrumKitCoverPlayer.objects.create(member=cls.ben.bandmember, priority=2)
         DrumKitCoverPlayer.objects.create(member=cls.carlos.bandmember, priority=2)
+        DrumKitCoverPlayer.objects.create(member=cls.dario.bandmember, priority=2)
 
         cls.kit_repertoire = list(
             PartAssignment.objects.filter(song_part__song=cls.song, instrument=cls.kit)
@@ -1177,6 +1177,24 @@ class DrumKitCoverInjectionTestCase(TestCase):
             kit_repertoire=self.kit_repertoire,
         )
         self.assertEqual(result, [])
+
+    def test_no_kit_repertoire_returns_empty(self):
+        result = inject_drum_kit_cover_assignments(
+            song=self.song,
+            kit_instrument=self.kit,
+            available_members={self.jansen.bandmember},
+            song_overrides=[],
+            cover_players=self.covers,
+            kit_repertoire=[],
+        )
+        self.assertEqual(result, [])
+
+    def test_returns_all_eligible_covers_at_best_priority(self):
+        result = self._inject([self.carlos.bandmember, self.dario.bandmember])
+        self.assertEqual(
+            {assignment.member for assignment in result},
+            {self.carlos.bandmember, self.dario.bandmember},
+        )
 
     def test_skip_cover_with_assign_override_on_song(self):
         gig = Gig.objects.create(
@@ -1271,3 +1289,36 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
         ]
         self.assertEqual(len(kit_players), 1)
         self.assertEqual(kit_players[0].member, self.ben.bandmember)
+
+    def test_listed_player_assigned_to_lead_does_not_block_cover(self):
+        GigAttendance.objects.filter(gig=self.gig, member=self.ben.bandmember).update(
+            status=GigAttendance.AVAILABLE,
+        )
+        lead_gig_instrument = GigInstrument.objects.get(gig=self.gig, instrument=self.lead)
+        override = GigPartAssignmentOverride(
+            member=self.ben.bandmember,
+            song_part=self.lead_part,
+            gig_instrument=lead_gig_instrument,
+            override_type=OverrideType.ASSIGN,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+
+        setlist, _, _ = get_gig_part_assignments(self.gig, [override])
+
+        kit_players = [
+            pa for pa in setlist[0].part_assignments if pa.instrument_id == self.kit.id
+        ]
+        self.assertEqual(len(kit_players), 1)
+        self.assertEqual(kit_players[0].member, self.jansen.bandmember)
+        self.assertEqual(len(setlist[0].unplayed_parts), 0)
+
+    def test_gig_without_flagged_kit_instrument_does_not_inject_cover(self):
+        GigInstrument.objects.filter(gig=self.gig, instrument=self.kit).delete()
+
+        setlist, _, _ = get_gig_part_assignments(self.gig, [])
+
+        self.assertEqual(len(setlist), 1)
+        self.assertFalse(
+            any(pa.instrument_id == self.kit.id for pa in setlist[0].part_assignments)
+        )
+        self.assertEqual(setlist[0].unplayed_parts, {self.engine})
