@@ -12,6 +12,24 @@
 {% block content %}
     <form method="post">{% csrf_token %}
         {{ form.as_p }}
+        <h2>Parts</h2>
+        {{ parts_formset.management_form }}
+        <table>
+            <thead>
+                <tr>
+                    <th>Part</th>
+                    <th>Has solo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for part_form in parts_formset %}
+                    <tr>
+                        <td>{{ part_form.instance.name }}{{ part_form.id }}</td>
+                        <td>{{ part_form.has_solo }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         <input type="submit" value="Update">
     </form>
 {% endblock %}

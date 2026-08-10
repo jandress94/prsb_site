@@ -18,6 +18,44 @@ from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
 from band.views import GigPartAssignmentOverrideForm
 
 
+class SongHasSoloUpdateTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.song = Song.objects.create(title="Update Solo Song", composer="X", in_gig_rotation=True)
+        cls.part = SongPart.objects.create(song=cls.song, name="Lead", has_solo=False)
+        cls.trumpet = Instrument.objects.create(name="Trumpet SongSolo", order=0)
+        cls.user = User.objects.create_user(username="song_solo_user", first_name="Sue", last_name="Song")
+        PartAssignment.objects.create(
+            member=cls.user.bandmember,
+            song_part=cls.part,
+            instrument=cls.trumpet,
+            performance_readiness=PerformanceReadiness.READY,
+            can_solo=False,
+        )
+
+    def test_song_update_can_set_has_solo(self):
+        url = reverse("band:song_update", kwargs={"pk": self.song.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = {
+            "title": self.song.title,
+            "composer": self.song.composer,
+            "duration": "",
+            "in_gig_rotation": "on",
+            "form": self.song.form,
+            "parts-TOTAL_FORMS": "1",
+            "parts-INITIAL_FORMS": "1",
+            "parts-MIN_NUM_FORMS": "0",
+            "parts-MAX_NUM_FORMS": "1000",
+            "parts-0-id": str(self.part.pk),
+            "parts-0-has_solo": "on",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.part.refresh_from_db()
+        self.assertTrue(self.part.has_solo)
+
+
 class GigRecommendationScoreTestCase(TestCase):
     def test_fewer_missing_parts_always_scores_higher(self):
         for missing_parts in range(10):

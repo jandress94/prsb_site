@@ -117,6 +117,15 @@ class SongDetailView(generic.DetailView):
         return context
 
 
+SongPartSoloFormSet = inlineformset_factory(
+    Song,
+    SongPart,
+    fields=("has_solo",),
+    extra=0,
+    can_delete=False,
+)
+
+
 class SongUpdateView(generic.UpdateView):
     model = Song
     template_name_suffix = '_update_form'
@@ -125,6 +134,31 @@ class SongUpdateView(generic.UpdateView):
               'duration',
               'in_gig_rotation',
               'form']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context["parts_formset"] = SongPartSoloFormSet(
+                self.request.POST,
+                instance=self.object,
+                prefix="parts",
+            )
+        else:
+            context["parts_formset"] = SongPartSoloFormSet(
+                instance=self.object,
+                prefix="parts",
+            )
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        formset = context["parts_formset"]
+        if formset.is_valid():
+            self.object = form.save()
+            formset.instance = self.object
+            formset.save()
+            return redirect(self.get_success_url())
+        return self.render_to_response(self.get_context_data(form=form))
 
 
 class SongCreateView(generic.CreateView):
