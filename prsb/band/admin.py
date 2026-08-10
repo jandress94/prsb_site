@@ -48,7 +48,7 @@ admin.site.register(Instrument, InstrumentAdmin)
 
 
 class DrumKitCoverPlayerAdmin(admin.ModelAdmin):
-    list_display = [band_member_name, "priority"]
+    list_display = ["member", "priority"]
     list_filter = ["priority"]
     ordering = ["priority"]
 
