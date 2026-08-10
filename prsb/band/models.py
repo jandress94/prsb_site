@@ -30,6 +30,7 @@ class Song(models.Model):
 class SongPart(models.Model):
     song = models.ForeignKey(Song, related_name='parts', on_delete=models.CASCADE)
     name = models.CharField(max_length=256)
+    has_solo = models.BooleanField(default=False)
 
     class Meta:
         order_with_respect_to = 'song'
@@ -39,6 +40,11 @@ class SongPart(models.Model):
 
     def get_order(self) -> int:
         return self._order
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.has_solo:
+            PartAssignment.objects.filter(song_part=self, can_solo=True).update(can_solo=False)
 
 
 class BandMember(models.Model):
@@ -113,6 +119,7 @@ class PartAssignment(models.Model):
     performance_readiness = models.CharField(max_length=256,
                                              choices=PerformanceReadiness.CHOICES,
                                              default=PerformanceReadiness.READY)
+    can_solo = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -127,6 +134,11 @@ class PartAssignment(models.Model):
 
     def is_not_ready(self) -> bool:
         return self.performance_readiness == PerformanceReadiness.NOT_READY
+
+    def clean(self):
+        super().clean()
+        if self.can_solo and self.song_part_id and not self.song_part.has_solo:
+            raise ValidationError({"can_solo": "Can only solo on a part that has a solo."})
 
 
 class Gig(models.Model):

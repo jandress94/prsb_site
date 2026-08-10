@@ -46,6 +46,7 @@
                     <th>Song</th>
                     <th>Part</th>
                     <th>Instrument</th>
+                    <th>Solo</th>
                     <th></th>
                 </tr>
             </thead>
@@ -56,6 +57,7 @@
                         <td>{{ part_assignment.song_part.song }}</td>
                         <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                         <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
+                        <td>{% if part_assignment.can_solo %}<span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
                         <td><a href={% url 'band:member_part_assignment_update' member_id=part_assignment.member.pk pk=part_assignment.pk %}>Edit</a></td>
                     </tr>
                 {% endfor %}
@@ -65,6 +67,7 @@
                         <td>{{ missing_song }}</td>
                         <td sorttable_customkey=100></td>
                         <td sorttable_customkey=100></td>
+                        <td></td>
                         <td></td>
                     </tr>
                 {% endfor %}

@@ -76,7 +76,7 @@
                             <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
                                 <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
                                 <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
-                                <td>{{ part_assignment.member }}</td>
+                                <td>{{ part_assignment.member }}{% if part_assignment.can_solo and part_assignment.song_part.has_solo %} <span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
                             </tr>
                         {% endfor %}
 
@@ -139,7 +139,7 @@
                         <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
                             <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
                             <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
-                            <td>{{ part_assignment.member }}</td>
+                            <td>{{ part_assignment.member }}{% if part_assignment.can_solo and part_assignment.song_part.has_solo %} <span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
                         </tr>
                     {% endfor %}
 
