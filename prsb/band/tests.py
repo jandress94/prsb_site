@@ -294,11 +294,55 @@ class GigPartAssignmentSoloMarkerTestCase(TestCase):
         )
         GigSetlistEntry.objects.create(gig=cls.gig, song=cls.song)
 
-    def test_gig_part_assignments_mark_solos(self):
+    def test_gig_part_assignments_mark_soloist_member(self):
         response = self.client.get(
             reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
         )
-        self.assertContains(response, "solo-marker")
+        self.assertContains(
+            response, 'Alice M <span class="solo-marker" title="Can solo">(solo)</span>', html=False
+        )
+
+    def test_gig_part_assignments_do_not_mark_solo_parts(self):
+        response = self.client.get(
+            reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
+        )
+        self.assertEqual(response.content.decode().count("solo-marker"), 1)
+
+
+class MemberDetailSoloColumnTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.trumpet = Instrument.objects.create(name="Trumpet MemberSolo", quantity=1, order=0)
+        cls.member = User.objects.create_user(
+            username="member_solo_user", first_name="Ben", last_name="Hills"
+        )
+        cls.song = Song.objects.create(title="Member Solo Song", in_gig_rotation=True)
+        cls.lead = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
+        cls.pad = SongPart.objects.create(song=cls.song, name="Pad", has_solo=False)
+        PartAssignment.objects.create(
+            member=cls.member.bandmember,
+            song_part=cls.lead,
+            instrument=cls.trumpet,
+            performance_readiness=PerformanceReadiness.READY,
+            can_solo=True,
+        )
+        PartAssignment.objects.create(
+            member=cls.member.bandmember,
+            song_part=cls.pad,
+            instrument=cls.trumpet,
+            performance_readiness=PerformanceReadiness.READY,
+            can_solo=False,
+        )
+
+    def test_member_detail_shows_solo_column_marker(self):
+        response = self.client.get(
+            reverse("band:member_detail", kwargs={"pk": self.member.bandmember.pk})
+        )
+        self.assertContains(response, "<th>Solo</th>", html=False)
+        self.assertContains(
+            response, '<span class="solo-marker" title="Can solo">(solo)</span>', html=False
+        )
+        self.assertEqual(response.content.decode().count("solo-marker"), 1)
 
 
 class GigRecommendationGroupingTestCase(TestCase):

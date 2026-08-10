@@ -25,7 +25,7 @@
         <h2>Parts</h2>
         <ul>
             {% for part in song.parts.all %}
-                <li>{{ part.name }}{% if part.has_solo %} <span class="solo-marker" title="Has solo">solo</span>{% endif %}</li>
+                <li>{{ part.name }}{% if part.has_solo %} <span class="solo-marker" title="Has solo">(solo)</span>{% endif %}</li>
             {% endfor %}
         </ul>
     </div>
@@ -60,7 +60,7 @@
                     <tr {% if part_assignment.is_backup %} class="warning" {% elif part_assignment.is_not_ready %} class="error" {% endif %}>
                         <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                         <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
-                        <td>{{ part_assignment.member.user.get_full_name }}{% if part_assignment.can_solo %} <span class="solo-marker" title="Can solo">solo</span>{% endif %}</td>
+                        <td>{{ part_assignment.member.user.get_full_name }}{% if part_assignment.can_solo %} <span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
                         <td><a href={% url 'band:song_part_assignment_update' song_id=song.pk pk=part_assignment.pk %}>Edit</a></td>
                     </tr>
                 {% endfor %}

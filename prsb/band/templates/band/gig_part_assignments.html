@@ -65,7 +65,7 @@
     {#                     the song parts not being played#}
                         {% for song_part in gpa.unplayed_parts %}
                             <tr class="error">
-                                <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}{% if song_part.has_solo %} <span class="solo-marker">solo</span>{% endif %}</td>
+                                <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
                                 <td sorttable_customkey=100></td>
                                 <td></td>
                             </tr>
@@ -74,9 +74,9 @@
     {#                     the people playing parts#}
                         {% for part_assignment in gpa.part_assignments %}
                             <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
-                                <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}{% if part_assignment.song_part.has_solo %} <span class="solo-marker">solo</span>{% endif %}</td>
+                                <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
                                 <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
-                                <td>{{ part_assignment.member }}{% if part_assignment.can_solo and part_assignment.song_part.has_solo %} <span class="solo-marker">solo</span>{% endif %}</td>
+                                <td>{{ part_assignment.member }}{% if part_assignment.can_solo and part_assignment.song_part.has_solo %} <span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
                             </tr>
                         {% endfor %}
 
@@ -128,7 +128,7 @@
 {#                     the song parts not being played#}
                     {% for song_part in gpa.unplayed_parts %}
                         <tr class="error">
-                            <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}{% if song_part.has_solo %} <span class="solo-marker">solo</span>{% endif %}</td>
+                            <td sorttable_customkey={{ song_part.get_order }}>{{ song_part }}</td>
                             <td sorttable_customkey=100></td>
                             <td></td>
                         </tr>
@@ -137,9 +137,9 @@
 {#                     the people playing parts#}
                     {% for part_assignment in gpa.part_assignments %}
                         <tr {% if part_assignment.is_backup %} class="warning" {% endif %}>
-                            <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}{% if part_assignment.song_part.has_solo %} <span class="solo-marker">solo</span>{% endif %}</td>
+                            <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part }}</td>
                             <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
-                            <td>{{ part_assignment.member }}{% if part_assignment.can_solo and part_assignment.song_part.has_solo %} <span class="solo-marker">solo</span>{% endif %}</td>
+                            <td>{{ part_assignment.member }}{% if part_assignment.can_solo and part_assignment.song_part.has_solo %} <span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
                         </tr>
                     {% endfor %}
 
