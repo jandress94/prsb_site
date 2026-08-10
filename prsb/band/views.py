@@ -200,7 +200,7 @@ class PartAssignmentListView(generic.ListView):
 class PartAssignmentForm(forms.ModelForm):
     class Meta:
         model = PartAssignment
-        fields = ['member', 'song_part', 'instrument', 'performance_readiness']
+        fields = ['member', 'song_part', 'instrument', 'performance_readiness', 'can_solo']
 
     def __init__(self, *args, **kwargs):
         member_id = kwargs.pop('member_id', None)
@@ -224,6 +224,21 @@ class PartAssignmentForm(forms.ModelForm):
             self.song_name = Song.objects.get(pk=song_id).title
         else:
             self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
+
+        self.fields['song_part'].queryset = self.fields['song_part'].queryset.select_related('song')
+        self.solo_part_ids = list(
+            self.fields['song_part'].queryset.filter(has_solo=True).values_list('pk', flat=True)
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        song_part = cleaned_data.get('song_part')
+        can_solo = cleaned_data.get('can_solo')
+        if can_solo and song_part is not None and not song_part.has_solo:
+            self.add_error('can_solo', 'Can only solo on a part that has a solo.')
+        if song_part is not None and not song_part.has_solo:
+            cleaned_data['can_solo'] = False
+        return cleaned_data
 
 
 class PartAssignmentCreateView(generic.CreateView):

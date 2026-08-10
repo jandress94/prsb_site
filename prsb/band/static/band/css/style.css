@@ -118,6 +118,12 @@ tr.error, ul.errorlist {
     background-color: #F6D7C5;
 }
 
+.solo-marker {
+    font-size: 0.85em;
+    font-style: italic;
+    opacity: 0.85;
+}
+
 /* Song recommendation groups */
 h3.recommendation-group {
     border-top: 3px solid #0D283C;

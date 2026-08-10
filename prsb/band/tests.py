@@ -859,3 +859,36 @@ class SoloFieldsTestCase(TestCase):
         assignment.refresh_from_db()
         self.assertFalse(assignment.can_solo)
         self.assertFalse(SongPart.objects.get(pk=self.solo_part.pk).has_solo)
+
+
+class PartAssignmentCanSoloFormTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.song = Song.objects.create(title="Form Solo Song", in_gig_rotation=True)
+        cls.solo_part = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
+        cls.plain_part = SongPart.objects.create(song=cls.song, name="Pad", has_solo=False)
+        cls.trumpet = Instrument.objects.create(name="Trumpet FormSolo", order=0)
+        cls.user = User.objects.create_user(username="form_solo_user", first_name="Fran", last_name="Form")
+
+    def test_form_rejects_can_solo_on_non_solo_part(self):
+        from band.views import PartAssignmentForm
+        form = PartAssignmentForm(data={
+            "member": self.user.bandmember.pk,
+            "song_part": self.plain_part.pk,
+            "instrument": self.trumpet.pk,
+            "performance_readiness": PerformanceReadiness.READY,
+            "can_solo": True,
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("can_solo", form.errors)
+
+    def test_form_accepts_can_solo_on_solo_part(self):
+        from band.views import PartAssignmentForm
+        form = PartAssignmentForm(data={
+            "member": self.user.bandmember.pk,
+            "song_part": self.solo_part.pk,
+            "instrument": self.trumpet.pk,
+            "performance_readiness": PerformanceReadiness.READY,
+            "can_solo": True,
+        })
+        self.assertTrue(form.is_valid(), form.errors)

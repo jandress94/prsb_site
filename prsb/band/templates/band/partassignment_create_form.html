@@ -21,4 +21,23 @@
         {{ form.as_p }}
         <input type="submit" value="Create">
     </form>
+    {{ form.solo_part_ids|json_script:"solo-part-ids" }}
+    <script>
+        (function () {
+            const soloPartIds = new Set(JSON.parse(document.getElementById("solo-part-ids").textContent));
+            const partSelect = document.getElementById("id_song_part");
+            const canSolo = document.getElementById("id_can_solo");
+
+            function syncCanSolo() {
+                const allowed = soloPartIds.has(Number(partSelect.value));
+                canSolo.disabled = !allowed;
+                if (!allowed) {
+                    canSolo.checked = false;
+                }
+            }
+
+            partSelect.addEventListener("change", syncCanSolo);
+            syncCanSolo();
+        })();
+    </script>
 {% endblock %}
