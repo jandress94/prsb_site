@@ -84,7 +84,7 @@ An earlier revision used a search box over a radio list. It was replaced because
 - Template: `band/templates/band/dietary_restrictions.html`
 - Nav: Home > Reports > Dietary Restrictions
 - Table: Member | Dietary restriction. Empty state copy when the filtered set is empty.
-- Caption stating the current scope (all active vs gig name + which statuses).
+- Caption stating the current scope (all active vs gig name + human-readable statuses: Available, Maybe available, No status yet).
 
 ## Implementation
 

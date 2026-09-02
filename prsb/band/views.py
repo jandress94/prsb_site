@@ -22,6 +22,7 @@ from .dietary_restrictions import (
     past_gigs,
     resolve_gig,
     resolve_statuses,
+    status_caption_labels,
     upcoming_gigs,
 )
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
@@ -859,6 +860,7 @@ class DietaryRestrictionsView(LoginRequiredMixin, generic.TemplateView):
         )
         context["gig"] = gig
         context["statuses"] = statuses or []
+        context["status_labels"] = status_caption_labels(context["statuses"])
         context["status_fieldset_enabled"] = gig is not None
         context["members"] = dietary_restriction_members(gig=gig, statuses=statuses)
         context["upcoming_gig_rows"] = gig_picker_rows(upcoming_gigs())

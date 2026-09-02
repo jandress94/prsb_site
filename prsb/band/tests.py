@@ -27,6 +27,7 @@ from band.dietary_restrictions import (
     past_gigs,
     resolve_gig,
     resolve_statuses,
+    status_caption_labels,
     upcoming_gigs,
 )
 
@@ -1474,6 +1475,15 @@ class DietaryRestrictionQueryTestCase(TestCase):
             [],
         )
 
+    def test_status_caption_labels(self):
+        self.assertEqual(
+            status_caption_labels(
+                [GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS, "bogus"],
+            ),
+            ["Maybe available", "No status yet"],
+        )
+        self.assertEqual(status_caption_labels([]), [])
+
     def test_upcoming_gigs_and_picker_rows(self):
         upcoming = list(upcoming_gigs())
         self.assertEqual(upcoming, [self.gig])
@@ -1599,4 +1609,10 @@ class DietaryRestrictionsViewTestCase(TestCase):
         resp = self.client.get(reverse("band:reports"))
         self.assertContains(resp, reverse("band:dietary_restrictions"))
         self.assertContains(resp, "Dietary Restrictions")
+
+    def test_caption_uses_status_labels(self):
+        resp = self._get(gig=str(self.gig.pk), status=["maybe_available", "no_status"])
+        self.assertEqual(resp.context["status_labels"], ["Maybe available", "No status yet"])
+        self.assertContains(resp, "Harvest Festival")
+        self.assertContains(resp, "Maybe available, No status yet")
 

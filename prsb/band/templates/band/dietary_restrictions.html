@@ -7,12 +7,12 @@
 {% endblock %}
 {% block content %}
     <h2>Dietary Restrictions</h2>
-    <p>
+    <p class="report-scope">
         {% if gig %}
             {{ gig.name }}
             ·
-            {% if statuses %}
-                {% for s in statuses %}{{ s }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% if status_labels %}
+                {% for label in status_labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}
             {% else %}
                 no statuses selected
             {% endif %}

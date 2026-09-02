@@ -10,6 +10,11 @@ ALLOWED_STATUSES = frozenset({
     GigAttendance.MAYBE_AVAILABLE,
     STATUS_NO_STATUS,
 })
+STATUS_LABELS = {
+    GigAttendance.AVAILABLE: "Available",
+    GigAttendance.MAYBE_AVAILABLE: "Maybe available",
+    STATUS_NO_STATUS: "No status yet",
+}
 
 
 _MAX_SIGNED_PK = 2**63 - 1
@@ -42,6 +47,10 @@ def resolve_statuses(
         if value in ALLOWED_STATUSES and value not in seen:
             seen.append(value)
     return seen
+
+
+def status_caption_labels(statuses: list[str]) -> list[str]:
+    return [STATUS_LABELS[value] for value in statuses if value in STATUS_LABELS]
 
 
 def _base_members() -> QuerySet:
