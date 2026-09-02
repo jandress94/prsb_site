@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator
 from django.db.models import Exists, OuterRef, Subquery
@@ -15,6 +16,13 @@ from tinymce.models import HTMLField
 
 from scripts.gig_part_assignment import get_gig_part_assignments, get_max_instrument_usage, GigPartAssignment
 from scripts.coverage_risk import DEFAULT_LOOKBACK, get_coverage_risk
+from .dietary_restrictions import (
+    dietary_restriction_members,
+    gig_picker_rows,
+    resolve_gig,
+    resolve_statuses,
+    upcoming_gigs,
+)
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
     GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
 
@@ -834,6 +842,28 @@ class CoverageRiskView(generic.TemplateView):
         lookback = _parse_lookback(self.request)
         context["lookback"] = lookback
         context["report"] = get_coverage_risk(lookback=lookback)
+        return context
+
+
+class DietaryRestrictionsView(LoginRequiredMixin, generic.TemplateView):
+    template_name = "band/dietary_restrictions.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        gig = resolve_gig(self.request.GET.get("gig"))
+        statuses = resolve_statuses(
+            gig=gig,
+            status_key_present="status" in self.request.GET,
+            raw_values=self.request.GET.getlist("status"),
+        )
+        context["gig"] = gig
+        context["statuses"] = statuses or []
+        context["status_fieldset_enabled"] = gig is not None
+        context["members"] = dietary_restriction_members(gig=gig, statuses=statuses)
+        upcoming = list(upcoming_gigs())
+        context["upcoming_gigs"] = upcoming
+        all_gigs = list(Gig.objects.order_by("start_datetime", "pk"))
+        context["all_gigs"] = gig_picker_rows(all_gigs)
         return context
 
 

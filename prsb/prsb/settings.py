@@ -162,6 +162,7 @@ PHONENUMBER_DEFAULT_FORMAT = "NATIONAL"
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 LOGIN_REDIRECT_URL = "/"
+LOGIN_URL = "band:login"
 
 if not DEBUG:
     STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"

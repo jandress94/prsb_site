@@ -1,0 +1,113 @@
+{% extends "band/base.html" %}
+{% load tz %}
+{% block title %}Dietary Restrictions | PRSB{% endblock %}
+{% block nav %}
+    <a href="{% url 'band:index' %}">Home</a>
+    > <a href="{% url 'band:reports' %}">Reports</a>
+    > Dietary Restrictions
+{% endblock %}
+{% block content %}
+    <h2>Dietary Restrictions</h2>
+    <p>
+        {% if gig %}
+            {{ gig.name }}
+            ·
+            {% if statuses %}
+                {% for s in statuses %}{{ s }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% else %}
+                no statuses selected
+            {% endif %}
+        {% else %}
+            All active members with a dietary restriction
+        {% endif %}
+    </p>
+    <form method="get" id="dietary-filter-form">
+        <label for="gig-search">Gig (optional)</label>
+        <input type="search" id="gig-search" placeholder="Type to search all gigs by name or date…" autocomplete="off">
+        <div id="gig-list" role="radiogroup" aria-label="Gig">
+            <label class="gig-option" data-always-visible="1">
+                <input type="radio" name="gig" value="" {% if not gig %}checked{% endif %}>
+                All active members
+            </label>
+            {% for row in all_gigs %}
+                <label class="gig-option"
+                       data-gig-id="{{ row.id }}"
+                       data-search="{{ row.name|lower }} {{ row.date }}"
+                       {% if gig and gig.pk == row.id %}data-selected="1"{% endif %}>
+                    <input type="radio" name="gig" value="{{ row.id }}" {% if gig and gig.pk == row.id %}checked{% endif %}>
+                    {{ row.name }}
+                    <span>{{ row.date }}</span>
+                </label>
+            {% endfor %}
+        </div>
+        <fieldset id="status-fieldset" {% if not status_fieldset_enabled %}disabled{% endif %}>
+            <legend>Include attendance status</legend>
+            <input type="hidden" name="status" value="">
+            <label><input type="checkbox" name="status" value="available" {% if not gig or "available" in statuses %}checked{% endif %}> Available</label>
+            <label><input type="checkbox" name="status" value="maybe_available" {% if "maybe_available" in statuses %}checked{% endif %}> Maybe available</label>
+            <label><input type="checkbox" name="status" value="no_status" {% if "no_status" in statuses %}checked{% endif %}> No status yet</label>
+        </fieldset>
+        <button type="submit">Apply</button>
+    </form>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>Dietary restriction</th></tr>
+        </thead>
+        <tbody>
+            {% for member in members %}
+                <tr>
+                    <td>{{ member }}</td>
+                    <td>{{ member.dietary_restrictions }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="2">No members match</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <script>
+    (function () {
+        const search = document.getElementById("gig-search");
+        const options = Array.from(document.querySelectorAll("#gig-list .gig-option[data-gig-id]"));
+        const upcomingIds = new Set({% for g in upcoming_gigs %}{{ g.pk }}{% if not forloop.last %},{% endif %}{% endfor %});
+        const fieldset = document.getElementById("status-fieldset");
+        const gigRadios = document.querySelectorAll('#gig-list input[name="gig"]');
+
+        function selectedGigId() {
+            const checked = document.querySelector('#gig-list input[name="gig"]:checked');
+            return checked ? checked.value : "";
+        }
+
+        function syncStatusEnabled() {
+            fieldset.disabled = !selectedGigId();
+        }
+
+        function filterList() {
+            const q = (search.value || "").trim().toLowerCase();
+            options.forEach(function (el) {
+                const id = el.getAttribute("data-gig-id");
+                const hay = el.getAttribute("data-search") || "";
+                const selected = el.getAttribute("data-selected") === "1" || selectedGigId() === id;
+                let show;
+                if (selected) {
+                    show = true;
+                } else if (!q) {
+                    show = upcomingIds.has(Number(id));
+                } else {
+                    show = hay.indexOf(q) !== -1;
+                }
+                el.hidden = !show;
+            });
+        }
+
+        search.addEventListener("input", filterList);
+        gigRadios.forEach(function (r) {
+            r.addEventListener("change", function () {
+                syncStatusEnabled();
+                filterList();
+            });
+        });
+        syncStatusEnabled();
+        filterList();
+    })();
+    </script>
+{% endblock %}

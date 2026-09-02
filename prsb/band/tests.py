@@ -1475,3 +1475,101 @@ class DietaryRestrictionQueryTestCase(TestCase):
         by_id = {row["id"]: row for row in rows}
         self.assertEqual(by_id[self.gig.pk]["name"], "Harvest Festival")
         self.assertRegex(by_id[self.gig.pk]["date"], r"^\d{4}-\d{2}-\d{2}$")
+
+
+class DietaryRestrictionsViewTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.viewer = User.objects.create_user(username="dr_viewer", password="pass")
+        alice_user = User.objects.create_user(username="dr_view_alice", first_name="Alice", last_name="View")
+        bob_user = User.objects.create_user(username="dr_view_bob", first_name="Bob", last_name="View")
+        finn_user = User.objects.create_user(username="dr_view_finn", first_name="Finn", last_name="View")
+        gabe_user = User.objects.create_user(username="dr_view_gabe", first_name="Gabe", last_name="View")
+        cls.alice = alice_user.bandmember
+        cls.alice.dietary_restrictions = "Vegetarian, no mushrooms"
+        cls.alice.save()
+        cls.bob = bob_user.bandmember
+        cls.bob.dietary_restrictions = "Peanut allergy"
+        cls.bob.save()
+        cls.finn = finn_user.bandmember
+        cls.finn.dietary_restrictions = "No shellfish"
+        cls.finn.save()
+        cls.gabe = gabe_user.bandmember
+        cls.gabe.dietary_restrictions = "Kosher"
+        cls.gabe.save()
+        now = timezone.now()
+        cls.gig = Gig.objects.create(
+            name="Harvest Festival",
+            start_datetime=now + timedelta(days=5),
+            end_datetime=now + timedelta(days=5, hours=2),
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.alice, status=GigAttendance.AVAILABLE,
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.bob, status=GigAttendance.MAYBE_AVAILABLE,
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.finn, status=GigAttendance.UNAVAILABLE,
+        )
+
+    def _get(self, **params):
+        self.client.login(username="dr_viewer", password="pass")
+        return self.client.get(reverse("band:dietary_restrictions"), params)
+
+    def test_anonymous_redirects_to_login(self):
+        resp = self.client.get(reverse("band:dietary_restrictions"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp.url)
+
+    def test_signed_in_ok(self):
+        resp = self._get()
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Vegetarian, no mushrooms")
+        self.assertContains(resp, "Bob View")
+        self.assertContains(resp, "Peanut allergy")
+        self.assertContains(resp, "Gabe View")
+        self.assertContains(resp, "Kosher")
+
+    def test_gig_without_status_param_defaults_available(self):
+        resp = self._get(gig=str(self.gig.pk))
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Vegetarian, no mushrooms")
+        self.assertNotContains(resp, "Bob View")
+        self.assertNotContains(resp, "Gabe View")
+        self.assertNotContains(resp, "Finn View")
+
+    def test_gig_available_and_no_status(self):
+        resp = self._get(gig=str(self.gig.pk), status=["available", "no_status"])
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Gabe View")
+        self.assertNotContains(resp, "Bob View")
+
+    def test_explicit_empty_status_is_empty_table(self):
+        resp = self._get(gig=str(self.gig.pk), status=[""])
+        self.assertNotContains(resp, "Alice View")
+        self.assertContains(resp, "No members match")
+
+    def test_junk_status_only_is_empty_table(self):
+        resp = self._get(gig=str(self.gig.pk), status=["unavailable"])
+        self.assertNotContains(resp, "Alice View")
+        self.assertContains(resp, "No members match")
+
+    def test_invalid_gig_is_unfiltered(self):
+        resp = self._get(gig="abc", status=["no_status"])
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Bob View")
+        self.assertContains(resp, "Gabe View")
+
+    def test_status_without_gig_is_ignored(self):
+        resp = self._get(status=["no_status"])
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Bob View")
+
+    def test_hub_links_to_report(self):
+        self.client.login(username="dr_viewer", password="pass")
+        resp = self.client.get(reverse("band:reports"))
+        self.assertContains(resp, reverse("band:dietary_restrictions"))
+        self.assertContains(resp, "Dietary Restrictions")
+
