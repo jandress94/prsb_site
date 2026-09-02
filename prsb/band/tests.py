@@ -1532,6 +1532,11 @@ class DietaryRestrictionsViewTestCase(TestCase):
         self.assertContains(resp, "Gabe View")
         self.assertContains(resp, "Kosher")
 
+    def test_upcoming_gig_ids_use_set_array_literal(self):
+        resp = self._get()
+        self.assertContains(resp, "new Set([")
+        self.assertNotContains(resp, "new Set(" + str(self.gig.pk))
+
     def test_gig_without_status_param_defaults_available(self):
         resp = self._get(gig=str(self.gig.pk))
         self.assertContains(resp, "Alice View")

@@ -68,7 +68,7 @@
     (function () {
         const search = document.getElementById("gig-search");
         const options = Array.from(document.querySelectorAll("#gig-list .gig-option[data-gig-id]"));
-        const upcomingIds = new Set({% for g in upcoming_gigs %}{{ g.pk }}{% if not forloop.last %},{% endif %}{% endfor %});
+        const upcomingIds = new Set([{% for g in upcoming_gigs %}{{ g.pk }}{% if not forloop.last %},{% endif %}{% endfor %}]);
         const fieldset = document.getElementById("status-fieldset");
         const gigRadios = document.querySelectorAll('#gig-list input[name="gig"]');
 
