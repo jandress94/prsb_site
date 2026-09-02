@@ -29,7 +29,7 @@ Give signed-in members a report of active band members who have dietary restrict
 |---|---|
 | (none) | All active members with a restriction. Status params ignored. |
 | `gig=<id>` | Scope to that gig. Unknown / non-numeric id → treat as no gig (default view), 200. |
-| `status` (repeatable) | Only when `gig` is valid. Allowed values: `available`, `maybe_available`, `no_status`. Unknown values dropped. If none remain after dropping, default to `available`. |
+| `status` (repeatable) | Only when `gig` is valid. Allowed values: `available`, `maybe_available`, `no_status`. Unknown values dropped. If the `status` key is **absent**, default to `available`. If it is **present** and no allowed values remain, the member list is empty. |
 
 Example: `/reports/dietary-restrictions/?gig=12&status=available&status=no_status`
 
@@ -54,8 +54,9 @@ If `gig` is a real gig:
 - `no_status` → no `GigAttendance` row for that gig
 - Union of selected statuses
 - `unavailable` is never included
+- No allowed statuses selected → empty table (the filter matched nobody), not a silent fallback to Available
 
-If every checkbox is unchecked in the UI, submit no `status` params so the server default (`available`) still applies. Do not produce an empty report from “no boxes checked.”
+A first load or a link with only `?gig=<id>` omits `status`, so the default is still Available. The Apply form must send `status` whenever a gig is selected (hidden empty `status=` plus any checked boxes) so “all boxes unchecked” is distinguishable from “never specified.”
 
 ### Gig picker UI
 
@@ -106,9 +107,8 @@ Anonymous GET → redirect to login (follow or check `302` + login URL).
 Signed-in GET:
 
 - Default: only active members with non-blank restrictions; inactive and blank/whitespace excluded.
-- `?gig=<id>` with default statuses: only `available` attendees with restrictions; unavailable, maybe, and no-row excluded.
-- `?gig=<id>&status=available&status=no_status`: union of those two groups.
-- `?gig=<id>&status=unavailable` (or other junk): ignored; behaves as default `available`.
+- `?gig=<id>` with no `status` key: Available attendees only (unavailable, maybe, and no-row excluded).
+- `?gig=<id>&status=` (or only junk such as `unavailable`): empty member list.
 - `?gig=99999` or `?gig=abc`: same as no gig; status params ignored.
 - `?status=no_status` with no gig: full default member set (status ignored).
 - Page contains member names and restriction text for included rows only.
