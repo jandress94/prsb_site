@@ -19,6 +19,7 @@ from scripts.coverage_risk import DEFAULT_LOOKBACK, get_coverage_risk
 from .dietary_restrictions import (
     dietary_restriction_members,
     gig_picker_rows,
+    past_gigs,
     resolve_gig,
     resolve_statuses,
     upcoming_gigs,
@@ -860,10 +861,8 @@ class DietaryRestrictionsView(LoginRequiredMixin, generic.TemplateView):
         context["statuses"] = statuses or []
         context["status_fieldset_enabled"] = gig is not None
         context["members"] = dietary_restriction_members(gig=gig, statuses=statuses)
-        upcoming = list(upcoming_gigs())
-        context["upcoming_gigs"] = upcoming
-        all_gigs = list(Gig.objects.order_by("start_datetime", "pk"))
-        context["all_gigs"] = gig_picker_rows(all_gigs)
+        context["upcoming_gig_rows"] = gig_picker_rows(upcoming_gigs())
+        context["past_gig_rows"] = gig_picker_rows(past_gigs())
         return context
 
 

@@ -20,6 +20,15 @@ from scripts.gig_part_assignment import (
 )
 from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
 from band.views import GigPartAssignmentOverrideForm
+from band.dietary_restrictions import (
+    STATUS_NO_STATUS,
+    dietary_restriction_members,
+    gig_picker_rows,
+    past_gigs,
+    resolve_gig,
+    resolve_statuses,
+    upcoming_gigs,
+)
 
 
 class SongHasSoloUpdateTestCase(TestCase):
@@ -1337,16 +1346,6 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
         self.assertEqual(setlist[0].unplayed_parts, {self.engine})
 
 
-from band.dietary_restrictions import (
-    STATUS_NO_STATUS,
-    dietary_restriction_members,
-    gig_picker_rows,
-    resolve_gig,
-    resolve_statuses,
-    upcoming_gigs,
-)
-
-
 class DietaryRestrictionQueryTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -1483,6 +1482,9 @@ class DietaryRestrictionQueryTestCase(TestCase):
         self.assertEqual(by_id[self.gig.pk]["name"], "Harvest Festival")
         self.assertRegex(by_id[self.gig.pk]["date"], r"^\d{4}-\d{2}-\d{2}$")
 
+    def test_past_gigs_excludes_upcoming(self):
+        self.assertEqual(list(past_gigs()), [self.past_gig])
+
 
 class DietaryRestrictionsViewTestCase(TestCase):
     @classmethod
@@ -1509,6 +1511,11 @@ class DietaryRestrictionsViewTestCase(TestCase):
             name="Harvest Festival",
             start_datetime=now + timedelta(days=5),
             end_datetime=now + timedelta(days=5, hours=2),
+        )
+        cls.past_gig = Gig.objects.create(
+            name="Oak Tree Picnic",
+            start_datetime=now - timedelta(days=30),
+            end_datetime=now - timedelta(days=30) + timedelta(hours=2),
         )
         GigAttendance.objects.create(
             gig=cls.gig, member=cls.alice, status=GigAttendance.AVAILABLE,
@@ -1539,10 +1546,18 @@ class DietaryRestrictionsViewTestCase(TestCase):
         self.assertContains(resp, "Gabe View")
         self.assertContains(resp, "Kosher")
 
-    def test_upcoming_gig_ids_use_set_array_literal(self):
+    def test_gig_picker_is_a_grouped_select(self):
         resp = self._get()
-        self.assertContains(resp, "new Set([")
-        self.assertNotContains(resp, "new Set(" + str(self.gig.pk))
+        self.assertContains(resp, '<select name="gig" id="gig-select">')
+        self.assertContains(resp, '<optgroup label="Upcoming">')
+        self.assertContains(resp, '<optgroup label="Past">')
+        self.assertContains(resp, f'<option value="{self.gig.pk}" >Harvest Festival')
+        self.assertContains(resp, f'<option value="{self.past_gig.pk}" >Oak Tree Picnic')
+        self.assertNotContains(resp, 'type="radio"')
+
+    def test_selected_gig_is_selected_in_the_picker(self):
+        resp = self._get(gig=str(self.past_gig.pk))
+        self.assertContains(resp, f'<option value="{self.past_gig.pk}" selected>Oak Tree Picnic')
 
     def test_gig_without_status_param_defaults_available(self):
         resp = self._get(gig=str(self.gig.pk))

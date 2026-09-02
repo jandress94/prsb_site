@@ -86,6 +86,10 @@ def upcoming_gigs() -> QuerySet:
     return Gig.objects.filter(end_datetime__gte=timezone.now()).order_by("start_datetime")
 
 
+def past_gigs() -> QuerySet:
+    return Gig.objects.filter(end_datetime__lt=timezone.now()).order_by("-start_datetime", "-pk")
+
+
 def gig_picker_rows(gigs) -> list[dict]:
     rows = []
     for gig in gigs:
