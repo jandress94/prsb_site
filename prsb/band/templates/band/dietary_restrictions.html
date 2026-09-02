@@ -1,0 +1,79 @@
+{% extends "band/base.html" %}
+{% block title %}Dietary Restrictions | PRSB{% endblock %}
+{% block nav %}
+    <a href="{% url 'band:index' %}">Home</a>
+    > <a href="{% url 'band:reports' %}">Reports</a>
+    > Dietary Restrictions
+{% endblock %}
+{% block content %}
+    <h2>Dietary Restrictions</h2>
+    <p class="report-scope">
+        {% if gig %}
+            {{ gig.name }}
+            ·
+            {% if status_labels %}
+                {% for label in status_labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% else %}
+                no statuses selected
+            {% endif %}
+        {% else %}
+            All active members with a dietary restriction
+        {% endif %}
+    </p>
+    <form method="get" id="dietary-filter-form">
+        <label for="gig-select">Gig (optional)</label>
+        <select name="gig" id="gig-select">
+            <option value="">All active members</option>
+            {% if upcoming_gig_rows %}
+                <optgroup label="Upcoming">
+                    {% for row in upcoming_gig_rows %}
+                        <option value="{{ row.id }}" {% if gig.pk == row.id %}selected{% endif %}>{{ row.name }} — {{ row.date }}</option>
+                    {% endfor %}
+                </optgroup>
+            {% endif %}
+            {% if past_gig_rows %}
+                <optgroup label="Past">
+                    {% for row in past_gig_rows %}
+                        <option value="{{ row.id }}" {% if gig.pk == row.id %}selected{% endif %}>{{ row.name }} — {{ row.date }}</option>
+                    {% endfor %}
+                </optgroup>
+            {% endif %}
+        </select>
+        <fieldset id="status-fieldset" {% if not status_fieldset_enabled %}disabled{% endif %}>
+            <legend>Include attendance status</legend>
+            <input type="hidden" name="status" value="">
+            <label><input type="checkbox" name="status" value="available" {% if not gig or "available" in statuses %}checked{% endif %}> Available</label>
+            <label><input type="checkbox" name="status" value="maybe_available" {% if "maybe_available" in statuses %}checked{% endif %}> Maybe available</label>
+            <label><input type="checkbox" name="status" value="no_status" {% if "no_status" in statuses %}checked{% endif %}> No status yet</label>
+        </fieldset>
+        <button type="submit">Apply</button>
+    </form>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>Dietary restriction</th></tr>
+        </thead>
+        <tbody>
+            {% for member in members %}
+                <tr>
+                    <td>{{ member }}</td>
+                    <td>{{ member.dietary_restrictions }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="2">No members match</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <script>
+    (function () {
+        const select = document.getElementById("gig-select");
+        const fieldset = document.getElementById("status-fieldset");
+
+        function syncStatusEnabled() {
+            fieldset.disabled = !select.value;
+        }
+
+        select.addEventListener("change", syncStatusEnabled);
+        syncStatusEnabled();
+    })();
+    </script>
+{% endblock %}

@@ -20,6 +20,16 @@ from scripts.gig_part_assignment import (
 )
 from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
 from band.views import GigPartAssignmentOverrideForm
+from band.dietary_restrictions import (
+    STATUS_NO_STATUS,
+    dietary_restriction_members,
+    gig_picker_rows,
+    past_gigs,
+    resolve_gig,
+    resolve_statuses,
+    status_caption_labels,
+    upcoming_gigs,
+)
 
 
 class SongHasSoloUpdateTestCase(TestCase):
@@ -1335,3 +1345,274 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
             any(pa.instrument_id == self.kit.id for pa in setlist[0].part_assignments)
         )
         self.assertEqual(setlist[0].unplayed_parts, {self.engine})
+
+
+class DietaryRestrictionQueryTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        def member(username, first, last, diet, active=True):
+            user = User.objects.create_user(
+                username=username, first_name=first, last_name=last, is_active=active,
+            )
+            bm = user.bandmember
+            bm.dietary_restrictions = diet
+            bm.save()
+            return bm
+
+        cls.alice = member("dr_alice", "Alice", "Diet", "Vegetarian")
+        cls.bob = member("dr_bob", "Bob", "Diet", "Peanut allergy")
+        cls.cara = member("dr_cara", "Cara", "Diet", "   ")
+        cls.dana = member("dr_dana", "Dana", "Diet", "")
+        cls.erin = member("dr_erin", "Erin", "Diet", "Gluten free", active=False)
+        cls.finn = member("dr_finn", "Finn", "Diet", "No shellfish")
+
+        now = timezone.now()
+        cls.gig = Gig.objects.create(
+            name="Harvest Festival",
+            start_datetime=now + timedelta(days=10),
+            end_datetime=now + timedelta(days=10, hours=2),
+        )
+        cls.past_gig = Gig.objects.create(
+            name="Oak Tree Picnic",
+            start_datetime=now - timedelta(days=20),
+            end_datetime=now - timedelta(days=20) + timedelta(hours=2),
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.alice, status=GigAttendance.AVAILABLE,
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.bob, status=GigAttendance.MAYBE_AVAILABLE,
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.finn, status=GigAttendance.UNAVAILABLE,
+        )
+
+    def test_default_excludes_blank_whitespace_inactive(self):
+        names = [m.user.first_name for m in dietary_restriction_members(gig=None, statuses=None)]
+        self.assertEqual(names, ["Alice", "Bob", "Finn"])
+
+    def test_resolve_gig_invalid(self):
+        self.assertIsNone(resolve_gig(None))
+        self.assertIsNone(resolve_gig(""))
+        self.assertIsNone(resolve_gig("abc"))
+        self.assertIsNone(resolve_gig("99999"))
+        self.assertIsNone(resolve_gig("99999999999999999999"))
+        self.assertEqual(resolve_gig(str(self.gig.pk)), self.gig)
+
+    def test_resolve_statuses_ignored_without_gig(self):
+        self.assertIsNone(resolve_statuses(
+            gig=None, status_key_present=True, raw_values=["no_status"],
+        ))
+
+    def test_resolve_statuses_default_available(self):
+        self.assertEqual(
+            resolve_statuses(gig=self.gig, status_key_present=False, raw_values=[]),
+            [GigAttendance.AVAILABLE],
+        )
+
+    def test_resolve_statuses_explicit_empty(self):
+        self.assertEqual(
+            resolve_statuses(gig=self.gig, status_key_present=True, raw_values=[""]),
+            [],
+        )
+        self.assertEqual(
+            resolve_statuses(
+                gig=self.gig, status_key_present=True, raw_values=["unavailable"],
+            ),
+            [],
+        )
+
+    def test_resolve_statuses_union_preserves_allowed_order(self):
+        self.assertEqual(
+            resolve_statuses(
+                gig=self.gig,
+                status_key_present=True,
+                raw_values=["no_status", "available", "no_status", "bogus"],
+            ),
+            [STATUS_NO_STATUS, GigAttendance.AVAILABLE],
+        )
+
+    def test_gig_available_default(self):
+        statuses = resolve_statuses(gig=self.gig, status_key_present=False, raw_values=[])
+        names = [m.user.first_name for m in dietary_restriction_members(gig=self.gig, statuses=statuses)]
+        self.assertEqual(names, ["Alice"])
+
+    def test_gig_available_and_no_status(self):
+        members = dietary_restriction_members(
+            gig=self.gig, statuses=[GigAttendance.AVAILABLE, STATUS_NO_STATUS],
+        )
+        names = [m.user.first_name for m in members]
+        self.assertEqual(names, ["Alice"])
+
+    def test_gig_maybe_and_no_status_includes_cara_gap(self):
+        # Cara has whitespace-only diet so she is never in the base set.
+        # Dana has empty diet. No extra member has a diet and no attendance row
+        # except we need one: create in this test.
+        user = User.objects.create_user(username="dr_gabe", first_name="Gabe", last_name="Diet")
+        gabe = user.bandmember
+        gabe.dietary_restrictions = "Kosher"
+        gabe.save()
+        members = dietary_restriction_members(
+            gig=self.gig, statuses=[GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS],
+        )
+        names = [m.user.first_name for m in members]
+        self.assertEqual(names, ["Bob", "Gabe"])
+
+    def test_unavailable_never_included(self):
+        members = dietary_restriction_members(
+            gig=self.gig,
+            statuses=[GigAttendance.AVAILABLE, GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS],
+        )
+        names = [m.user.first_name for m in members]
+        self.assertNotIn("Finn", names)
+
+    def test_empty_statuses_yields_no_members(self):
+        self.assertEqual(list(dietary_restriction_members(gig=self.gig, statuses=[])), [])
+
+    def test_unrecognized_statuses_yields_no_members(self):
+        self.assertEqual(
+            list(dietary_restriction_members(gig=self.gig, statuses=["unavailable"])),
+            [],
+        )
+
+    def test_status_caption_labels(self):
+        self.assertEqual(
+            status_caption_labels(
+                [GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS, "bogus"],
+            ),
+            ["Maybe available", "No status yet"],
+        )
+        self.assertEqual(status_caption_labels([]), [])
+
+    def test_upcoming_gigs_and_picker_rows(self):
+        upcoming = list(upcoming_gigs())
+        self.assertEqual(upcoming, [self.gig])
+        rows = gig_picker_rows(Gig.objects.all())
+        by_id = {row["id"]: row for row in rows}
+        self.assertEqual(by_id[self.gig.pk]["name"], "Harvest Festival")
+        self.assertRegex(by_id[self.gig.pk]["date"], r"^\d{4}-\d{2}-\d{2}$")
+
+    def test_past_gigs_excludes_upcoming(self):
+        self.assertEqual(list(past_gigs()), [self.past_gig])
+
+
+class DietaryRestrictionsViewTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.viewer = User.objects.create_user(username="dr_viewer", password="pass")
+        alice_user = User.objects.create_user(username="dr_view_alice", first_name="Alice", last_name="View")
+        bob_user = User.objects.create_user(username="dr_view_bob", first_name="Bob", last_name="View")
+        finn_user = User.objects.create_user(username="dr_view_finn", first_name="Finn", last_name="View")
+        gabe_user = User.objects.create_user(username="dr_view_gabe", first_name="Gabe", last_name="View")
+        cls.alice = alice_user.bandmember
+        cls.alice.dietary_restrictions = "Vegetarian, no mushrooms"
+        cls.alice.save()
+        cls.bob = bob_user.bandmember
+        cls.bob.dietary_restrictions = "Peanut allergy"
+        cls.bob.save()
+        cls.finn = finn_user.bandmember
+        cls.finn.dietary_restrictions = "No shellfish"
+        cls.finn.save()
+        cls.gabe = gabe_user.bandmember
+        cls.gabe.dietary_restrictions = "Kosher"
+        cls.gabe.save()
+        now = timezone.now()
+        cls.gig = Gig.objects.create(
+            name="Harvest Festival",
+            start_datetime=now + timedelta(days=5),
+            end_datetime=now + timedelta(days=5, hours=2),
+        )
+        cls.past_gig = Gig.objects.create(
+            name="Oak Tree Picnic",
+            start_datetime=now - timedelta(days=30),
+            end_datetime=now - timedelta(days=30) + timedelta(hours=2),
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.alice, status=GigAttendance.AVAILABLE,
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.bob, status=GigAttendance.MAYBE_AVAILABLE,
+        )
+        GigAttendance.objects.create(
+            gig=cls.gig, member=cls.finn, status=GigAttendance.UNAVAILABLE,
+        )
+
+    def _get(self, **params):
+        self.client.login(username="dr_viewer", password="pass")
+        return self.client.get(reverse("band:dietary_restrictions"), params)
+
+    def test_anonymous_redirects_to_login(self):
+        resp = self.client.get(reverse("band:dietary_restrictions"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp.url)
+
+    def test_signed_in_ok(self):
+        resp = self._get()
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Vegetarian, no mushrooms")
+        self.assertContains(resp, "Bob View")
+        self.assertContains(resp, "Peanut allergy")
+        self.assertContains(resp, "Gabe View")
+        self.assertContains(resp, "Kosher")
+
+    def test_gig_picker_is_a_grouped_select(self):
+        resp = self._get()
+        self.assertContains(resp, '<select name="gig" id="gig-select">')
+        self.assertContains(resp, '<optgroup label="Upcoming">')
+        self.assertContains(resp, '<optgroup label="Past">')
+        self.assertContains(resp, f'<option value="{self.gig.pk}" >Harvest Festival')
+        self.assertContains(resp, f'<option value="{self.past_gig.pk}" >Oak Tree Picnic')
+        self.assertNotContains(resp, 'type="radio"')
+
+    def test_selected_gig_is_selected_in_the_picker(self):
+        resp = self._get(gig=str(self.past_gig.pk))
+        self.assertContains(resp, f'<option value="{self.past_gig.pk}" selected>Oak Tree Picnic')
+
+    def test_gig_without_status_param_defaults_available(self):
+        resp = self._get(gig=str(self.gig.pk))
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Vegetarian, no mushrooms")
+        self.assertNotContains(resp, "Bob View")
+        self.assertNotContains(resp, "Gabe View")
+        self.assertNotContains(resp, "Finn View")
+
+    def test_gig_available_and_no_status(self):
+        resp = self._get(gig=str(self.gig.pk), status=["available", "no_status"])
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Gabe View")
+        self.assertNotContains(resp, "Bob View")
+
+    def test_explicit_empty_status_is_empty_table(self):
+        resp = self._get(gig=str(self.gig.pk), status=[""])
+        self.assertNotContains(resp, "Alice View")
+        self.assertContains(resp, "No members match")
+
+    def test_junk_status_only_is_empty_table(self):
+        resp = self._get(gig=str(self.gig.pk), status=["unavailable"])
+        self.assertNotContains(resp, "Alice View")
+        self.assertContains(resp, "No members match")
+
+    def test_invalid_gig_is_unfiltered(self):
+        resp = self._get(gig="abc", status=["no_status"])
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Bob View")
+        self.assertContains(resp, "Gabe View")
+
+    def test_status_without_gig_is_ignored(self):
+        resp = self._get(status=["no_status"])
+        self.assertContains(resp, "Alice View")
+        self.assertContains(resp, "Bob View")
+
+    def test_hub_links_to_report(self):
+        self.client.login(username="dr_viewer", password="pass")
+        resp = self.client.get(reverse("band:reports"))
+        self.assertContains(resp, reverse("band:dietary_restrictions"))
+        self.assertContains(resp, "Dietary Restrictions")
+
+    def test_caption_uses_status_labels(self):
+        resp = self._get(gig=str(self.gig.pk), status=["maybe_available", "no_status"])
+        self.assertEqual(resp.context["status_labels"], ["Maybe available", "No status yet"])
+        self.assertContains(resp, "Harvest Festival")
+        self.assertContains(resp, "Maybe available, No status yet")
+

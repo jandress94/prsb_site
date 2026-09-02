@@ -11,8 +11,8 @@ from . import views
 
 app_name = "band"
 urlpatterns = [
-    path("accounts/login/", LoginView.as_view(template_name="band/registration/login.html")),
-    path("accounts/logout/", LogoutView.as_view(next_page="login"), name="logout"),
+    path("accounts/login/", LoginView.as_view(template_name="band/registration/login.html"), name="login"),
+    path("accounts/logout/", LogoutView.as_view(next_page="band:login"), name="logout"),
 
     path("", views.index, name='index'),
 
@@ -57,6 +57,7 @@ urlpatterns = [
 
     path("reports/", views.ReportsView.as_view(), name="reports"),
     path("reports/coverage-risk/", views.CoverageRiskView.as_view(), name="coverage_risk"),
+    path("reports/dietary-restrictions/", views.DietaryRestrictionsView.as_view(), name="dietary_restrictions"),
 
     path("health/", views.health_check),
 

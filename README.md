@@ -32,6 +32,7 @@ cd prsb && poetry run python manage.py test band.tests
 
 These are ideas for new features or changes to existing functionality.
 Items marked `[agent]` were added from prior conversation themes and a project scan.
+- Indication of missing soloist on a song that requires it
 - UI to add and edit song parts directly from the song creation or edit form
 - Authentication and RBAC
 - addition of .../me (or something like that) to allow authenticated users direct access to their own profile and song parts
@@ -39,7 +40,7 @@ Items marked `[agent]` were added from prior conversation themes and a project s
 - Multiple bands
 - Caching / saving gig part assignments for better latency
 - Something better for the part-assignments page. Loading everything is too massive and isn't useful.
-- Other reports (t-shirts, dietary restrictions, birthdays, etc)
+- Other reports (t-shirts, birthdays, etc)
 - Refactor the gig part assignment scoring / solving logic to make it more clear and understandable.
 - move to lambda-based architecture and scale-to-zero DB to minimize cost.
 - Instrument management UI (CRUD / coverage-risk and song-count flags without Django admin) `[agent]`
