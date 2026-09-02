@@ -20,7 +20,7 @@ Give signed-in members a report of active band members who have dietary restrict
 - Optional gig filter; without a gig, attendance status controls are hidden or disabled and ignored if present in the query string.
 - With a gig: include members whose attendance matches the selected statuses. Status options are **Available**, **Maybe available**, and **No status yet** (no `GigAttendance` row). There is no Unavailable option; unavailable members never appear in a gig-scoped result.
 - Default statuses when a gig is selected: **Available** only.
-- Gig picker: search box plus always-visible list. Upcoming gigs (name + local date) listed without typing; typing filters **all** gigs by name or date. “All active members” is the default radio. No Select2 / Tom Select.
+- Gig picker: a native `<select>` with the gigs split into **Upcoming** and **Past** `<optgroup>`s (name + local date per option). “All active members” is the default option. No Select2 / Tom Select.
 - Linked from the reports hub.
 
 ## Query params
@@ -60,19 +60,23 @@ A first load or a link with only `?gig=<id>` omits `status`, so the default is s
 
 ### Gig picker UI
 
-Vanilla HTML + a small inline script. No new JS libraries.
+A native `<select name="gig">`. No new JS libraries.
 
-- Radio: “All active members” (no `gig` param) plus one radio per listed gig (`name=gig`, `value=<id>`).
-- Search input filters the gig radios client-side. Empty search: show upcoming gigs only (`end_datetime >= now`, ordered by `start_datetime` ascending — same as `GigListView`). Non-empty search: match name or formatted date across **all** gigs; hide non-matches. “All active members” always stays visible.
-- Each gig option shows name and local start date (same date style as the gig list: `Y-m-d` is fine).
-- Selected past gig that is not in the upcoming list must remain in the DOM (and stay visible) so the radio stays selected after Apply.
-- With JS off: upcoming radios and “All active members” still submit; past gigs are reachable only via URL.
+- First option: “All active members”, value `""` (no `gig` param).
+- `<optgroup label="Upcoming">`: `end_datetime >= now`, ordered by `start_datetime` ascending (same as `GigListView`).
+- `<optgroup label="Past">`: `end_datetime < now`, ordered by `start_datetime` descending.
+- Each option label is `<name> — <local start date>` in `Y-m-d`.
+- An `<optgroup>` is omitted entirely when it has no gigs.
+- The selected gig renders `selected`, so the choice survives Apply whether it is upcoming or past.
+- Fully functional with JS off; browsers provide type-ahead within the open dropdown.
+
+An earlier revision used a search box over a radio list. It was replaced because the list was long and because the site stylesheet sets `label { display: inline-block }`, which overrides the `hidden` attribute the filter script relied on.
 
 ### Status controls
 
 - Checkboxes: Available (`available`), Maybe available (`maybe_available`), No status yet (`no_status`). Default checked: Available.
-- When “All active members” is selected (or no gig in the GET), hide **or** disable the status group. Prefer disable + `aria-disabled` if hiding makes layout jump; either is acceptable. Disabled fields are not submitted.
-- Client-side: toggling the gig radio enables/disables the group without a round trip. Server still ignores `status` when there is no valid gig.
+- When “All active members” is selected (or no gig in the GET), the `<fieldset>` renders `disabled`. Disabled fields are not submitted, so the hidden `status=""` also drops out.
+- Client-side: changing the gig `<select>` enables/disables the fieldset without a round trip. Server still ignores `status` when there is no valid gig.
 
 ### Page chrome
 
