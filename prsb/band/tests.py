@@ -1396,6 +1396,7 @@ class DietaryRestrictionQueryTestCase(TestCase):
         self.assertIsNone(resolve_gig(""))
         self.assertIsNone(resolve_gig("abc"))
         self.assertIsNone(resolve_gig("99999"))
+        self.assertIsNone(resolve_gig("99999999999999999999"))
         self.assertEqual(resolve_gig(str(self.gig.pk)), self.gig)
 
     def test_resolve_statuses_ignored_without_gig(self):
@@ -1467,6 +1468,12 @@ class DietaryRestrictionQueryTestCase(TestCase):
 
     def test_empty_statuses_yields_no_members(self):
         self.assertEqual(list(dietary_restriction_members(gig=self.gig, statuses=[])), [])
+
+    def test_unrecognized_statuses_yields_no_members(self):
+        self.assertEqual(
+            list(dietary_restriction_members(gig=self.gig, statuses=["unavailable"])),
+            [],
+        )
 
     def test_upcoming_gigs_and_picker_rows(self):
         upcoming = list(upcoming_gigs())

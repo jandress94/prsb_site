@@ -12,12 +12,17 @@ ALLOWED_STATUSES = frozenset({
 })
 
 
+_MAX_SIGNED_PK = 2**63 - 1
+
+
 def resolve_gig(raw: str | None) -> Gig | None:
     if raw is None or raw == "":
         return None
     try:
         pk = int(raw)
     except (TypeError, ValueError):
+        return None
+    if pk < 1 or pk > _MAX_SIGNED_PK:
         return None
     return Gig.objects.filter(pk=pk).first()
 
@@ -67,6 +72,9 @@ def dietary_restriction_members(
         clauses.append(Exists(attendance.filter(status=GigAttendance.MAYBE_AVAILABLE)))
     if STATUS_NO_STATUS in statuses:
         clauses.append(~Exists(attendance))
+
+    if not clauses:
+        return qs.none()
 
     combined = clauses[0]
     for clause in clauses[1:]:
