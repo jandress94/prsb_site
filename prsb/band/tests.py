@@ -156,7 +156,7 @@ class SoloAwareAssignmentTestCase(TestCase):
         self.assertEqual(len(setlist), 1)
         self.assertEqual(len(setlist[0].part_assignments), 1)
         self.assertEqual(setlist[0].part_assignments[0].member, self.bob.bandmember)
-        self.assertEqual(setlist[0].unplayed_parts, set())
+        self.assertEqual(setlist[0].unplayed_parts, [])
 
     def test_solo_preference_beats_scarcer_instrument(self):
         # Alice must choose between soloing on plentiful trumpet and scarce mellophone fit.
@@ -207,7 +207,7 @@ class SoloAwareAssignmentTestCase(TestCase):
 
         setlist, _, _ = get_gig_part_assignments(gig, [])
         self.assertEqual(len(setlist), 1)
-        self.assertEqual(setlist[0].unplayed_parts, set())
+        self.assertEqual(setlist[0].unplayed_parts, [])
 
     def test_backup_soloists_do_not_displace_ready_player(self):
         song = Song.objects.create(title="Ready Beats Backup Solo Song", in_gig_rotation=True)
@@ -259,7 +259,7 @@ class SoloAwareAssignmentTestCase(TestCase):
         setlist, _, _ = get_gig_part_assignments(gig, [])
         self.assertEqual(len(setlist), 1)
         gpa = setlist[0]
-        self.assertEqual(gpa.unplayed_parts, set())
+        self.assertEqual(gpa.unplayed_parts, [])
         by_part = {pa.song_part_id: pa.member for pa in gpa.part_assignments}
         self.assertEqual(by_part[pad.id], self.alice.bandmember)
         self.assertEqual(by_part[lead.id], self.bob.bandmember)
@@ -566,6 +566,53 @@ class GigPartAssignmentOverrideTestCase(TestCase):
 
         self.assertRedirects(response, reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
         self.assertFalse(GigPartAssignmentOverride.objects.filter(pk=override.pk).exists())
+
+
+class PartAssignmentOrderingTestCase(TestCase):
+    """Rows for a song read part order, then instrument order, then player name."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.low = Instrument.objects.create(name="Ordering Low", quantity=2, order=0)
+        cls.high = Instrument.objects.create(name="Ordering High", quantity=2, order=1)
+
+        cls.alice = User.objects.create_user(username="ord_alice", first_name="Alice", last_name="A")
+        cls.bob = User.objects.create_user(username="ord_bob", first_name="Bob", last_name="B")
+        cls.carol = User.objects.create_user(username="ord_carol", first_name="Carol", last_name="C")
+        cls.zed = User.objects.create_user(username="ord_zed", first_name="Zed", last_name="Z")
+
+    def test_rows_sorted_by_part_then_instrument_then_name(self):
+        song = Song.objects.create(title="Ordering Song", in_gig_rotation=True)
+        first = SongPart.objects.create(song=song, name="First Part")
+        second = SongPart.objects.create(song=song, name="Second Part")
+
+        PartAssignment.objects.create(member=self.bob.bandmember, song_part=first, instrument=self.high)
+        PartAssignment.objects.create(member=self.zed.bandmember, song_part=first, instrument=self.high)
+        PartAssignment.objects.create(member=self.carol.bandmember, song_part=first, instrument=self.low)
+        PartAssignment.objects.create(member=self.alice.bandmember, song_part=second, instrument=self.low)
+
+        gig = Gig.objects.create(
+            name="Ordering Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        GigInstrument.objects.create(gig=gig, instrument=self.low, gig_quantity=2)
+        GigInstrument.objects.create(gig=gig, instrument=self.high, gig_quantity=2)
+        for member in BandMember.objects.filter(user__username__startswith="ord_"):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        GigSetlistEntry.objects.create(gig=gig, song=song)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        rows = [
+            (pa.song_part.name, pa.instrument.name, pa.member.user.get_full_name())
+            for pa in setlist[0].part_assignments
+        ]
+        self.assertEqual(rows, [
+            ("First Part", "Ordering Low", "Carol C"),
+            ("First Part", "Ordering High", "Bob B"),
+            ("First Part", "Ordering High", "Zed Z"),
+            ("Second Part", "Ordering Low", "Alice A"),
+        ])
 
 
 class MaxInstrumentUsageTestCase(TestCase):
@@ -1344,7 +1391,7 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
         self.assertFalse(
             any(pa.instrument_id == self.kit.id for pa in setlist[0].part_assignments)
         )
-        self.assertEqual(setlist[0].unplayed_parts, {self.engine})
+        self.assertEqual(setlist[0].unplayed_parts, [self.engine])
 
 
 class DietaryRestrictionQueryTestCase(TestCase):

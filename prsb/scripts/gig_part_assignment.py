@@ -61,7 +61,8 @@ class GigPartAssignment:
         self.non_players = [a for a in attendees if a not in playing_attendees]
 
         covered_parts = {pa.song_part for pa in part_assignments}
-        self.unplayed_parts = {sp for sp in song.parts.all() if sp not in covered_parts}
+        # List, not set: the template renders these in part order.
+        self.unplayed_parts = [sp for sp in song.parts.all().order_by('_order') if sp not in covered_parts]
 
         played_instruments = Counter(pa.instrument for pa in part_assignments)
         remaining_instrument_counts = {gi.instrument: gi.gig_quantity - played_instruments[gi.instrument] for gi in gig_instruments}
@@ -325,7 +326,10 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
                                                     performance_readiness=pao.performance_readiness)
                                      for pao in assign_overrides]
     gig_part_assignments = list(itertools.compress(all_assignments + overrides_as_part_assignments, result.x))
-    gig_part_assignments = sorted(gig_part_assignments, key=lambda gpa: (gpa.song_part._order, gpa.member.user.get_full_name()))
+    gig_part_assignments = sorted(
+        gig_part_assignments,
+        key=lambda gpa: (gpa.song_part._order, gpa.instrument.order, gpa.member.user.get_full_name()),
+    )
 
     # c_instrument is negative and reaches this magnitude when every instrument slot is filled.
     max_instrument_reward = ScoringConfig.SCORE_RANGE / 2 * ScoringConfig.ASSIGNMENT_WEIGHT_INSTRUMENT
