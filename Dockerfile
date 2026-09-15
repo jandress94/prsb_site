@@ -1,5 +1,5 @@
 # Use a slim Python image for a smaller footprint
-FROM python:3.10-slim-bullseye
+FROM python:3.10-slim-bookworm
 
 # Set up environment variables
 ARG APP_HOME="/app"
