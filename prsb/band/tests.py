@@ -3,13 +3,15 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
+from django.db.migrations.executor import MigrationExecutor
+from djangoyearlessdate.helpers import YearlessDate
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from band.models import (
-    Band, BandMembership, BandMember, BandSong, DrumKitCoverPlayer, Gig, GigAttendance,
+    Band, BandMembership, BandMember, BandSong, BandSpecialDate, DrumKitCoverPlayer, Gig, GigAttendance,
     GigInstrument, GigPartAssignmentOverride, GigSetlistEntry, Instrument, OverrideType,
     PartAssignment, PerformanceReadiness, Song, SongPart,
 )
@@ -1696,17 +1698,40 @@ class BandModelTestCase(TestCase):
 
 
 class PrsbBackfillMigrationTestCase(TransactionTestCase):
+    def _seed_historical_rows_at_0033(self):
+        state = MigrationExecutor(connection).loader.project_state(
+            [("band", "0033_seed_drum_kit_cover_players")],
+        )
+        apps = state.apps
+        SongModel = apps.get_model("band", "Song")
+        UserModel = apps.get_model("auth", "User")
+        GigModel = apps.get_model("band", "Gig")
+        BandMemberModel = apps.get_model("band", "BandMember")
+        DrumKitCoverPlayerModel = apps.get_model("band", "DrumKitCoverPlayer")
+        BandSpecialDateModel = apps.get_model("band", "BandSpecialDate")
+
+        song = SongModel.objects.create(title="Backfill Song", composer="X", in_gig_rotation=True)
+        user = UserModel.objects.create_user(username="backfill_user", first_name="Back", last_name="Fill")
+        member = BandMemberModel.objects.create(user=user)
+        GigModel.objects.create(
+            name="Backfill Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        cover = DrumKitCoverPlayerModel.objects.create(member=member, priority=1)
+        special = BandSpecialDateModel.objects.create(
+            date=YearlessDate(17, 10),
+            description="Backfill special date",
+        )
+        return song.pk, cover.pk, special.pk
+
     def _remigrate_through_backfill(self, seed_historical_rows=False):
         call_command("migrate", "band", "0033", verbosity=0, interactive=False)
+        seeded = None
         if seed_historical_rows:
-            Song.objects.create(title="Backfill Song", composer="X", in_gig_rotation=True)
-            User.objects.create_user(username="backfill_user", first_name="Back", last_name="Fill")
-            Gig.objects.create(
-                name="Backfill Gig",
-                start_datetime=timezone.now(),
-                end_datetime=timezone.now() + timedelta(hours=2),
-            )
+            seeded = self._seed_historical_rows_at_0033()
         call_command("migrate", "band", "0034", verbosity=0, interactive=False)
+        return seeded
 
     def test_prsb_band_exists_after_migrate(self):
         self._remigrate_through_backfill()
@@ -1715,11 +1740,22 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
         self.assertTrue(band.is_active)
 
     def test_historical_rows_attach_to_prsb(self):
-        self._remigrate_through_backfill(seed_historical_rows=True)
+        song_id, cover_id, special_id = self._remigrate_through_backfill(seed_historical_rows=True)
         band = Band.objects.get(slug="prsb")
         self.assertTrue(band.is_active)
         self.assertEqual(band.name, "PRSB")
         self.assertEqual(BandSong.objects.filter(band=band, is_active=True).count(), Song.objects.count())
         self.assertEqual(BandMembership.objects.filter(band=band, is_active=True).count(), BandMember.objects.count())
         self.assertFalse(Gig.objects.exclude(bands=band).exists())
+
+        song = Song.objects.get(pk=song_id)
+        band_song = BandSong.objects.get(band=band, song=song)
+        self.assertTrue(song.in_gig_rotation)
+        self.assertTrue(band_song.in_gig_rotation)
+
+        cover = DrumKitCoverPlayer.objects.get(pk=cover_id)
+        self.assertEqual(cover.band, band)
+
+        special = BandSpecialDate.objects.get(pk=special_id)
+        self.assertEqual(special.band, band)
 
