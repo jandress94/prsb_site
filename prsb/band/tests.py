@@ -1944,6 +1944,63 @@ class BandRoutingTestCase(TestCase):
         self.assertEqual(missing.status_code, 404)
 
 
+class BandPageScopeTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prsb = Band.objects.get(slug="prsb")
+        cls.other = Band.objects.create(name="Other", slug="other")
+        cls.user = User.objects.create_user(username="scope_user", first_name="Scope", last_name="User")
+        BandMembership.objects.create(band=cls.prsb, member=cls.user.bandmember)
+        cls.song = Song.objects.create(title="Scoped Song")
+        BandSong.objects.create(band=cls.prsb, song=cls.song, in_gig_rotation=True)
+
+    def test_other_band_hides_prsb_roster_and_song(self):
+        self.assertNotContains(
+            self.client.get(reverse("band:member_list", kwargs={"slug": "other"})),
+            "Scope User",
+        )
+        self.assertNotContains(
+            self.client.get(reverse("band:song_list", kwargs={"slug": "other"})),
+            "Scoped Song",
+        )
+
+    def test_deactivate_hides_member_and_link_reactivates(self):
+        membership = BandMembership.objects.get(band=self.prsb, member=self.user.bandmember)
+        membership.is_active = False
+        membership.save()
+        listed = self.client.get(reverse("band:member_list", kwargs={"slug": "prsb"}))
+        self.assertNotContains(listed, "Scope User")
+        self.client.post(
+            reverse("band:member_link", kwargs={"slug": "prsb"}),
+            {"member": self.user.bandmember.pk},
+        )
+        membership.refresh_from_db()
+        self.assertTrue(membership.is_active)
+
+    def test_song_title_edit_is_global_and_rotation_is_local(self):
+        BandSong.objects.create(band=self.other, song=self.song, in_gig_rotation=False)
+        self.client.post(
+            reverse("band:song_update", kwargs={"slug": "prsb", "pk": self.song.pk}),
+            {"title": "Renamed", "composer": "", "duration": "", "form": "", "in_gig_rotation": "on",
+             "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0", "parts-MIN_NUM_FORMS": "0",
+             "parts-MAX_NUM_FORMS": "1000"},
+        )
+        self.song.refresh_from_db()
+        self.assertEqual(self.song.title, "Renamed")
+        self.assertFalse(self.song.band_songs.get(band=self.other).in_gig_rotation)
+
+    def test_inactive_band_post_to_create_endpoints_returns_403(self):
+        inactive = Band.objects.create(name="Inactive", slug="inactive", is_active=False)
+        cases = (
+            ("band:song_create", {}),
+            ("band:member_link", {"member": self.user.bandmember.pk}),
+            ("band:gig_create", {}),
+        )
+        for url_name, data in cases:
+            response = self.client.post(reverse(url_name, kwargs={"slug": inactive.slug}), data)
+            self.assertEqual(response.status_code, 403, msg=url_name)
+
+
 class BandSongRotationTestCase(TestCase):
     def test_rotation_is_per_band(self):
         song = Song.objects.create(title="Shared Tune")

@@ -10,9 +10,34 @@
 {% block content %}
     <h2>Songs</h2>
     <a href={% url 'band:song_create' band.slug %}>New Song</a>
+
+    {% if linkable_songs %}
+        <form method="post" action={% url 'band:song_link' band.slug %}>{% csrf_token %}
+            <label for="song-link-select">Link existing song</label>
+            <select name="song" id="song-link-select" required>
+                <option value="">---------</option>
+                {% for song in linkable_songs %}
+                    <option value="{{ song.pk }}">{{ song.title }}</option>
+                {% endfor %}
+            </select>
+            <label>
+                <input type="checkbox" name="in_gig_rotation">
+                In gig rotation
+            </label>
+            <button type="submit">Link</button>
+        </form>
+    {% endif %}
+
     <ul>
         {% for song in object_list %}
-            <li><a href={% url 'band:song_detail' band.slug song.id %}>{{ song.title }}</a></li>
+            <li>
+                <a href={% url 'band:song_detail' band.slug song.id %}>{{ song.title }}</a>
+                <form method="post" action={% url 'band:song_unlink' band.slug %} style="display:inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="song" value="{{ song.pk }}">
+                    <button type="submit">Deactivate</button>
+                </form>
+            </li>
         {% endfor %}
     </ul>
 {% endblock %}

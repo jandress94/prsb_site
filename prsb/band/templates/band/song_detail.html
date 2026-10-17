@@ -19,6 +19,13 @@
         <p>Duration: {{ song.duration|duration_to_minutes_seconds }}</p>
         {% if band_song %}<p>In Gig Rotation: {{ band_song.in_gig_rotation }}</p>{% endif %}
         <p>Form: {{ song.form }}</p>
+        {% if other_bands %}
+            <p>Also in:
+                {% for other in other_bands %}
+                    <a href={% url 'band:song_detail' other.slug song.pk %}>{{ other.name }}</a>{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+            </p>
+        {% endif %}
     </div>
 
     <div>

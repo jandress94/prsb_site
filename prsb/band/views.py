@@ -26,8 +26,9 @@ from .dietary_restrictions import (
     status_caption_labels,
     upcoming_gigs,
 )
-from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
-    GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
+from .linking import link_member, link_song
+from .models import Band, BandMembership, BandSong, Song, Gig, GigAttendance, BandMember, PartAssignment, \
+    Instrument, SongPart, GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
 from .scoping import active_bands, get_band, get_gig_for_band
 
 
@@ -77,7 +78,31 @@ class BandHomeView(BandScopedMixin, generic.TemplateView):
 
 class MemberListView(BandScopedMixin, generic.ListView):
     def get_queryset(self):
-        return BandMember.objects.filter(user__is_active=True).order_by('user__first_name', 'user__last_name')
+        return BandMember.objects.filter(
+            bandmembership__band=self.band,
+            bandmembership__is_active=True,
+            user__is_active=True,
+        ).order_by('user__first_name', 'user__last_name')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        active_member_ids = BandMembership.objects.filter(
+            band=self.band, is_active=True,
+        ).values_list("member_id", flat=True)
+        member_ids_on_band = BandMembership.objects.filter(
+            band=self.band,
+        ).values_list("member_id", flat=True)
+        active_on_other_bands = BandMembership.objects.filter(
+            is_active=True,
+        ).exclude(band=self.band).values_list("member_id", flat=True)
+        context["linkable_members"] = BandMember.objects.filter(
+            user__is_active=True,
+        ).exclude(pk__in=active_member_ids).exclude(
+            pk__in=member_ids_on_band,
+        ).exclude(pk__in=active_on_other_bands).order_by(
+            'user__first_name', 'user__last_name',
+        )
+        return context
 
 
 def get_missing_songs_for_member(member: BandMember):
@@ -147,6 +172,25 @@ class ProfileUpdateView(generic.UpdateView):
 class SongListView(BandScopedMixin, generic.ListView):
     model = Song
 
+    def get_queryset(self):
+        return Song.objects.filter(
+            band_songs__band=self.band,
+            band_songs__is_active=True,
+        ).order_by("title")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        active_song_ids = BandSong.objects.filter(
+            band=self.band, is_active=True,
+        ).values_list("song_id", flat=True)
+        active_on_other_bands = BandSong.objects.filter(
+            is_active=True,
+        ).exclude(band=self.band).values_list("song_id", flat=True)
+        context["linkable_songs"] = Song.objects.exclude(
+            pk__in=active_song_ids,
+        ).exclude(pk__in=active_on_other_bands).order_by("title")
+        return context
+
 
 class SongDetailView(BandScopedMixin, generic.DetailView):
     model = Song
@@ -155,6 +199,12 @@ class SongDetailView(BandScopedMixin, generic.DetailView):
         context = super().get_context_data(**kwargs)
 
         song = context['song']
+
+        context["band_song"] = BandSong.objects.filter(band=self.band, song=song).first()
+        context["other_bands"] = Band.objects.filter(
+            bandsong__song=song,
+            bandsong__is_active=True,
+        ).exclude(pk=self.band.pk)
 
         context["part_assignments"] = part_assignments = PartAssignment.objects.filter(
             song_part__song=song
@@ -178,13 +228,41 @@ SongPartSoloFormSet = inlineformset_factory(
 )
 
 
+class SongRotationFormMixin:
+    in_gig_rotation = forms.BooleanField(required=False, label="In gig rotation")
+
+    def save_band_song_rotation(self, band, song, in_gig_rotation):
+        band_song = BandSong.objects.filter(band=band, song=song).first()
+        if band_song is None:
+            link_song(band, song, in_gig_rotation=in_gig_rotation)
+        else:
+            band_song.in_gig_rotation = in_gig_rotation
+            band_song.save(update_fields=["in_gig_rotation"])
+
+
+class SongCreateForm(SongRotationFormMixin, forms.ModelForm):
+    class Meta:
+        model = Song
+        fields = ['title', 'composer', 'duration', 'form']
+
+
+class SongUpdateForm(SongRotationFormMixin, forms.ModelForm):
+    class Meta:
+        model = Song
+        fields = ['title', 'composer', 'duration', 'form']
+
+
 class SongUpdateView(BandScopedMixin, generic.UpdateView):
     model = Song
     template_name_suffix = '_update_form'
-    fields = ['title',
-              'composer',
-              'duration',
-              'form']
+    form_class = SongUpdateForm
+
+    def get_initial(self):
+        initial = super().get_initial()
+        band_song = BandSong.objects.filter(band=self.band, song=self.object).first()
+        if band_song is not None:
+            initial["in_gig_rotation"] = band_song.in_gig_rotation
+        return initial
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -208,6 +286,11 @@ class SongUpdateView(BandScopedMixin, generic.UpdateView):
             self.object = form.save()
             formset.instance = self.object
             formset.save()
+            form.save_band_song_rotation(
+                self.band,
+                self.object,
+                form.cleaned_data.get("in_gig_rotation", False),
+            )
             return redirect(self.get_success_url())
         return self.render_to_response(self.get_context_data(form=form))
 
@@ -218,13 +301,58 @@ class SongUpdateView(BandScopedMixin, generic.UpdateView):
 class SongCreateView(BandScopedMixin, generic.CreateView):
     model = Song
     template_name_suffix = '_create_form'
-    fields = ['title',
-              'composer',
-              'duration',
-              'form']
+    form_class = SongCreateForm
+
+    def form_valid(self, form):
+        self.object = form.save()
+        link_song(
+            self.band,
+            self.object,
+            in_gig_rotation=form.cleaned_data.get("in_gig_rotation", False),
+        )
+        return redirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse("band:song_detail", kwargs={"slug": self.band.slug, "pk": self.object.pk})
+
+
+class MemberLinkView(BandScopedMixin, generic.View):
+    def post(self, request, slug):
+        member = get_object_or_404(BandMember, pk=request.POST.get("member"))
+        link_member(self.band, member)
+        return redirect("band:member_list", slug=slug)
+
+
+class MemberUnlinkView(BandScopedMixin, generic.View):
+    def post(self, request, slug):
+        membership = get_object_or_404(
+            BandMembership,
+            band=self.band,
+            member_id=request.POST.get("member"),
+        )
+        membership.is_active = False
+        membership.save(update_fields=["is_active"])
+        return redirect("band:member_list", slug=slug)
+
+
+class SongLinkView(BandScopedMixin, generic.View):
+    def post(self, request, slug):
+        song = get_object_or_404(Song, pk=request.POST.get("song"))
+        in_gig_rotation = request.POST.get("in_gig_rotation") == "on"
+        link_song(self.band, song, in_gig_rotation=in_gig_rotation)
+        return redirect("band:song_list", slug=slug)
+
+
+class SongUnlinkView(BandScopedMixin, generic.View):
+    def post(self, request, slug):
+        band_song = get_object_or_404(
+            BandSong,
+            band=self.band,
+            song_id=request.POST.get("song"),
+        )
+        band_song.is_active = False
+        band_song.save(update_fields=["is_active"])
+        return redirect("band:song_list", slug=slug)
 
 
 def get_missing_person_songs():
@@ -275,11 +403,15 @@ class PartAssignmentListView(BandScopedMixin, generic.ListView):
     model = PartAssignment
 
     def get_queryset(self):
-        return PartAssignment.objects.filter(member__user__is_active=True).order_by('song_part__song__title',
-                                                                                    'song_part___order',
-                                                                                    'instrument__name',
-                                                                                    'member__user__first_name',
-                                                                                    'member__user__last_name')
+        return PartAssignment.objects.filter(
+            member__user__is_active=True,
+            song_part__song__band_songs__band=self.band,
+            song_part__song__band_songs__is_active=True,
+        ).order_by('song_part__song__title',
+                   'song_part___order',
+                   'instrument__name',
+                   'member__user__first_name',
+                   'member__user__last_name')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
