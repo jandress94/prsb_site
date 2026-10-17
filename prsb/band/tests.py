@@ -38,7 +38,12 @@ from band.dietary_restrictions import (
 class SongHasSoloUpdateTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.song = Song.objects.create(title="Update Solo Song", composer="X", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Update Solo Song", composer="X")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.part = SongPart.objects.create(song=cls.song, name="Lead", has_solo=False)
         cls.trumpet = Instrument.objects.create(name="Trumpet SongSolo", order=0)
         cls.user = User.objects.create_user(username="song_solo_user", first_name="Sue", last_name="Song")
@@ -58,7 +63,6 @@ class SongHasSoloUpdateTestCase(TestCase):
             "title": self.song.title,
             "composer": self.song.composer,
             "duration": "",
-            "in_gig_rotation": "on",
             "form": self.song.form,
             "parts-TOTAL_FORMS": "1",
             "parts-INITIAL_FORMS": "1",
@@ -126,7 +130,12 @@ class SoloAwareAssignmentTestCase(TestCase):
         return gig
 
     def test_prefers_soloist_over_non_soloist_same_instrument(self):
-        song = Song.objects.create(title="Solo Prefer Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Solo Prefer Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         PartAssignment.objects.create(
             member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
@@ -146,7 +155,12 @@ class SoloAwareAssignmentTestCase(TestCase):
         self.assertEqual(players[0].member, self.alice.bandmember)
 
     def test_covers_solo_part_with_non_soloist_when_needed(self):
-        song = Song.objects.create(title="Solo Fallback Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Solo Fallback Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         PartAssignment.objects.create(
             member=self.bob.bandmember, song_part=lead, instrument=self.trumpet,
@@ -163,7 +177,12 @@ class SoloAwareAssignmentTestCase(TestCase):
 
     def test_solo_preference_beats_scarcer_instrument(self):
         # Alice must choose between soloing on plentiful trumpet and scarce mellophone fit.
-        song = Song.objects.create(title="Solo Vs Scarcity Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Solo Vs Scarcity Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         PartAssignment.objects.create(
             member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
@@ -184,7 +203,12 @@ class SoloAwareAssignmentTestCase(TestCase):
         self.assertEqual(alice_assignment.instrument, self.trumpet)
 
     def test_solo_preference_never_sacrifices_coverable_part(self):
-        song = Song.objects.create(title="Coverage Bound Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Coverage Bound Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         pad = SongPart.objects.create(song=song, name="Pad", has_solo=False)
         trombone = Instrument.objects.create(name="Trombone SoloOpt", quantity=1, order=2)
@@ -213,7 +237,12 @@ class SoloAwareAssignmentTestCase(TestCase):
         self.assertEqual(setlist[0].unplayed_parts, [])
 
     def test_backup_soloists_do_not_displace_ready_player(self):
-        song = Song.objects.create(title="Ready Beats Backup Solo Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Ready Beats Backup Solo Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         PartAssignment.objects.create(
             member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
@@ -241,7 +270,12 @@ class SoloAwareAssignmentTestCase(TestCase):
     def test_covering_part_still_beats_solo_preference(self):
         # Two parts. Alice is the only person who can cover Pad, and can also solo on Lead.
         # Bob can cover Lead but cannot solo. Prefer covering both parts over putting Alice on Lead.
-        song = Song.objects.create(title="Cover Beats Solo Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Cover Beats Solo Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         pad = SongPart.objects.create(song=song, name="Pad", has_solo=False)
         PartAssignment.objects.create(
@@ -269,7 +303,12 @@ class SoloAwareAssignmentTestCase(TestCase):
 
     def test_song_score_ignores_solo_fields(self):
         # Same coverage and instruments → same score whether can_solo is set or not.
-        song = Song.objects.create(title="Score Unchanged Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Score Unchanged Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
         PartAssignment.objects.create(
             member=self.alice.bandmember, song_part=lead, instrument=self.trumpet,
@@ -291,7 +330,12 @@ class GigPartAssignmentSoloMarkerTestCase(TestCase):
     def setUpTestData(cls):
         cls.trumpet = Instrument.objects.create(name="Trumpet Marker", quantity=1, order=0)
         cls.alice = User.objects.create_user(username="solo_marker_alice", first_name="Alice", last_name="M")
-        cls.song = Song.objects.create(title="Solo Marker Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Solo Marker Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.lead = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
         PartAssignment.objects.create(
             member=cls.alice.bandmember,
@@ -333,7 +377,12 @@ class MemberDetailSoloColumnTestCase(TestCase):
         cls.member = User.objects.create_user(
             username="member_solo_user", first_name="Ben", last_name="Hills"
         )
-        cls.song = Song.objects.create(title="Member Solo Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Member Solo Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.lead = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
         cls.pad = SongPart.objects.create(song=cls.song, name="Pad", has_solo=False)
         PartAssignment.objects.create(
@@ -382,7 +431,12 @@ class GigRecommendationGroupingTestCase(TestCase):
         for member in BandMember.objects.all():
             GigAttendance.objects.create(gig=cls.gig, member=member, status=GigAttendance.AVAILABLE)
 
-        covered_song = Song.objects.create(title="Covered Song", in_gig_rotation=True)
+        covered_song = Song.objects.create(title="Covered Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=covered_song,
+            in_gig_rotation=True,
+        )
         covered_drums = SongPart.objects.create(song=covered_song, name="Drums Part")
         covered_guitar = SongPart.objects.create(song=covered_song, name="Guitar Part")
         PartAssignment.objects.create(
@@ -398,7 +452,12 @@ class GigRecommendationGroupingTestCase(TestCase):
             performance_readiness=PerformanceReadiness.READY,
         )
 
-        incomplete_song = Song.objects.create(title="Incomplete Song", in_gig_rotation=True)
+        incomplete_song = Song.objects.create(title="Incomplete Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=incomplete_song,
+            in_gig_rotation=True,
+        )
         incomplete_drums = SongPart.objects.create(song=incomplete_song, name="Drums Part")
         SongPart.objects.create(song=incomplete_song, name="Nobody Plays This Part")
         PartAssignment.objects.create(
@@ -429,7 +488,12 @@ class GigRecommendationGroupingTestCase(TestCase):
 class GigPartAssignmentOverrideTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.song = Song.objects.create(title="Test Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Test Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.part_a = SongPart.objects.create(song=cls.song, name="Part A")
         cls.part_b = SongPart.objects.create(song=cls.song, name="Part B")
 
@@ -585,7 +649,12 @@ class PartAssignmentOrderingTestCase(TestCase):
         cls.zed = User.objects.create_user(username="ord_zed", first_name="Zed", last_name="Z")
 
     def test_rows_sorted_by_part_then_instrument_then_name(self):
-        song = Song.objects.create(title="Ordering Song", in_gig_rotation=True)
+        song = Song.objects.create(title="Ordering Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=song,
+            in_gig_rotation=True,
+        )
         first = SongPart.objects.create(song=song, name="First Part")
         second = SongPart.objects.create(song=song, name="Second Part")
 
@@ -698,8 +767,18 @@ class CoverageRiskScoringTestCase(TestCase):
         cls.bob = BandMember.objects.get(user=cls.bob_user)
         cls.cara = BandMember.objects.get(user=cls.cara_user)
 
-        cls.song = Song.objects.create(title="Yellow Bird", in_gig_rotation=True)
-        cls.other = Song.objects.create(title="Not In Rotation", in_gig_rotation=False)
+        cls.song = Song.objects.create(title="Yellow Bird")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
+        cls.other = Song.objects.create(title="Not In Rotation")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.other,
+            in_gig_rotation=False,
+        )
         cls.part_lead = SongPart.objects.create(song=cls.song, name="Lead")
         cls.part_bass = SongPart.objects.create(song=cls.song, name="Bass")
         SongPart.objects.create(song=cls.other, name="Lead")
@@ -917,7 +996,12 @@ class CoverageRiskViewsTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(username="viewer", password="pass")
-        Song.objects.create(title="Rotation Song", in_gig_rotation=True)
+        rotation_song = Song.objects.create(title="Rotation Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=rotation_song,
+            in_gig_rotation=True,
+        )
 
     def test_reports_hub_ok(self):
         self.client.login(username="viewer", password="pass")
@@ -1035,7 +1119,12 @@ class GigListPastPaginationTestCase(TestCase):
 class SoloFieldsTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.song = Song.objects.create(title="Solo Fields Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Solo Fields Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.solo_part = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
         cls.plain_part = SongPart.objects.create(song=cls.song, name="Pad", has_solo=False)
         cls.trumpet = Instrument.objects.create(name="Trumpet SoloFields", order=0)
@@ -1091,7 +1180,12 @@ class SoloFieldsTestCase(TestCase):
 class PartAssignmentCanSoloFormTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.song = Song.objects.create(title="Form Solo Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Form Solo Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.solo_part = SongPart.objects.create(song=cls.song, name="Lead", has_solo=True)
         cls.plain_part = SongPart.objects.create(song=cls.song, name="Pad", has_solo=False)
         cls.trumpet = Instrument.objects.create(name="Trumpet FormSolo", order=0)
@@ -1148,7 +1242,12 @@ class DrumKitCoverInjectionTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.band = Band.objects.create(name="Kit Inject Band", slug="kit-inject-band")
-        cls.song = Song.objects.create(title="Kit Inject Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Kit Inject Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.engine = SongPart.objects.create(song=cls.song, name="Engine Room")
         cls.lead = SongPart.objects.create(song=cls.song, name="Lead")
         cls.kit = Instrument.objects.create(
@@ -1285,7 +1384,12 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.band = Band.objects.create(name="Kit Gig Band", slug="kit-gig-band")
-        cls.song = Song.objects.create(title="Kit Gig Song", in_gig_rotation=True)
+        cls.song = Song.objects.create(title="Kit Gig Song")
+        BandSong.objects.create(
+            band=Band.objects.get(slug="prsb"),
+            song=cls.song,
+            in_gig_rotation=True,
+        )
         cls.engine = SongPart.objects.create(song=cls.song, name="Engine Room")
         cls.lead_part = SongPart.objects.create(song=cls.song, name="Lead")
 
@@ -1750,7 +1854,6 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
 
         song = Song.objects.get(pk=song_id)
         band_song = BandSong.objects.get(band=band, song=song)
-        self.assertTrue(song.in_gig_rotation)
         self.assertTrue(band_song.in_gig_rotation)
 
         cover = DrumKitCoverPlayer.objects.get(pk=cover_id)
@@ -1758,4 +1861,16 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
 
         special = BandSpecialDate.objects.get(pk=special_id)
         self.assertEqual(special.band, band)
+
+
+class BandSongRotationTestCase(TestCase):
+    def test_rotation_is_per_band(self):
+        song = Song.objects.create(title="Shared Tune")
+        first = Band.objects.create(name="First", slug="first")
+        second = Band.objects.create(name="Second", slug="second")
+        BandSong.objects.create(band=first, song=song, in_gig_rotation=True)
+        BandSong.objects.create(band=second, song=song, in_gig_rotation=False)
+        self.assertTrue(song.band_songs.get(band=first).in_gig_rotation)
+        self.assertFalse(song.band_songs.get(band=second).in_gig_rotation)
+        self.assertNotIn("in_gig_rotation", {field.name for field in Song._meta.fields})
 

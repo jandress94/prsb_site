@@ -31,7 +31,6 @@ class Song(models.Model):
     title = models.CharField(max_length=256)
     composer = models.CharField(max_length=256, blank=True)
     duration = models.DurationField(null=True, blank=True)
-    in_gig_rotation = models.BooleanField(default=False)
     form = models.CharField(max_length=256, blank=True)
 
     class Meta:

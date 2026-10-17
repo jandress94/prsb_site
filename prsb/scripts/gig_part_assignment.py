@@ -358,7 +358,9 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
                                                          member__gigattendance__gig=gig,
                                                          member__gigattendance__status=GigAttendance.AVAILABLE,
                                                          instrument__giginstrument__in=gig_instruments,
-                                                         song_part__song__in_gig_rotation=True) \
+                                                         song_part__song__band_songs__band__slug="prsb",
+                                                         song_part__song__band_songs__in_gig_rotation=True,
+                                                         song_part__song__band_songs__is_active=True) \
         .exclude(performance_readiness=PerformanceReadiness.NOT_READY) \
         .order_by("song_part__song")
 
@@ -379,7 +381,9 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
     if gig_has_kit:
         kit_pas = PartAssignment.objects.filter(
             instrument=kit_instrument,
-            song_part__song__in_gig_rotation=True,
+            song_part__song__band_songs__band__slug="prsb",
+            song_part__song__band_songs__in_gig_rotation=True,
+            song_part__song__band_songs__is_active=True,
         ).select_related("member", "song_part", "instrument").order_by(
             "song_part___order", "pk",
         )

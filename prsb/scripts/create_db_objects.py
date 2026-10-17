@@ -8,14 +8,14 @@ django.setup()
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 
-from band.models import BandMember, Song, SongPart, Instrument, PartAssignment, DrumKitCoverPlayer
+from band.models import Band, BandMember, BandSong, Song, SongPart, Instrument, PartAssignment, DrumKitCoverPlayer
 import pandas as pd
 import numpy as np
 
 from datetime import timedelta
 
 
-def get_songs() -> list[Song]:
+def get_songs() -> list[tuple[Song, Any]]:
     songs_df = pd.read_csv('resources/data/Songs.csv').replace({np.nan: ''})
     songs = []
 
@@ -26,12 +26,14 @@ def get_songs() -> list[Song]:
         else:
             duration = None
 
-        songs.append(Song(
-            title=row.Title,
-            composer=row.Composer,
-            duration=duration,
-            in_gig_rotation=row.InGigRotation,
-            form=row.Form
+        songs.append((
+            Song(
+                title=row.Title,
+                composer=row.Composer,
+                duration=duration,
+                form=row.Form,
+            ),
+            row.InGigRotation,
         ))
 
     return songs
@@ -41,7 +43,7 @@ def get_song_parts(songs: list[Song]) -> list[SongPart]:
     song_parts_df = pd.read_csv('resources/data/SongParts.csv')
     song_parts = []
 
-    title_to_song_map = {s.title: s for s in songs}
+    title_to_song_map = {s.title: s for s, _ in songs}
 
     for _, row in song_parts_df.iterrows():
         song_parts.append(SongPart(
@@ -174,10 +176,16 @@ if __name__ == '__main__':
     songs = Song.objects.all()
     if len(songs) == 0:
         songs = get_songs()
-        for song in songs:
+        prsb = Band.objects.get(slug="prsb")
+        for song, in_gig_rotation in songs:
             song.save()
+            BandSong.objects.update_or_create(
+                band=prsb,
+                song=song,
+                defaults={"in_gig_rotation": in_gig_rotation, "is_active": True},
+            )
     else:
-        songs = list(songs)
+        songs = [(s, None) for s in songs]
 
     song_parts = SongPart.objects.all()
     if len(song_parts) == 0:

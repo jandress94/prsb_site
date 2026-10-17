@@ -18,7 +18,7 @@ class SongPartInline(admin.TabularInline):
 
 class SongAdmin(admin.ModelAdmin):
     inlines = [SongPartInline]
-    list_display = ["title", "in_gig_rotation"]
+    list_display = ["title"]
 admin.site.register(Song, SongAdmin)
 
 

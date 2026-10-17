@@ -142,7 +142,6 @@ class SongUpdateView(generic.UpdateView):
     fields = ['title',
               'composer',
               'duration',
-              'in_gig_rotation',
               'form']
 
     def get_context_data(self, **kwargs):
@@ -177,7 +176,6 @@ class SongCreateView(generic.CreateView):
     fields = ['title',
               'composer',
               'duration',
-              'in_gig_rotation',
               'form']
 
 
@@ -595,12 +593,27 @@ class GigSetlistEntryForm(forms.ModelForm):
         model = GigSetlistEntry
         fields = ['song', 'break_duration']
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, gig=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if gig is not None:
+            self.fields["song"].queryset = Song.objects.filter(
+                band_songs__band__in=gig.bands.all(),
+                band_songs__is_active=True,
+            ).distinct()
 
-        self.fields['song'].queryset = Song.objects.filter(in_gig_rotation=True)
 
-GigSetlistEntryFormSet = modelformset_factory(GigSetlistEntry, form=GigSetlistEntryForm, extra=0, can_delete=True, can_delete_extra=True)
+def gig_setlist_entry_formset(gig):
+    class GigSetlistEntryFormForGig(GigSetlistEntryForm):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, gig=gig, **kwargs)
+
+    return modelformset_factory(
+        GigSetlistEntry,
+        form=GigSetlistEntryFormForGig,
+        extra=0,
+        can_delete=True,
+        can_delete_extra=True,
+    )
 
 
 class GigSetlistUpdateView(generic.View):
@@ -608,12 +621,12 @@ class GigSetlistUpdateView(generic.View):
 
     def get(self, request, gig_id):
         gig = get_object_or_404(Gig, id=gig_id)
-        formset = GigSetlistEntryFormSet(queryset=GigSetlistEntry.objects.filter(gig=gig))
+        formset = gig_setlist_entry_formset(gig)(queryset=GigSetlistEntry.objects.filter(gig=gig))
         return render(request, self.template_name, {'formset': formset, 'gig': gig})
 
     def post(self, request, gig_id):
         gig = get_object_or_404(Gig, id=gig_id)
-        formset = GigSetlistEntryFormSet(request.POST)
+        formset = gig_setlist_entry_formset(gig)(request.POST)
         formset.clean()
 
         for i in range(len(formset.forms) - 1, -1, -1):
@@ -692,7 +705,11 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
                                                                                                        gig_id=self.gig_id,
                                                                                                        status=GigAttendance.AVAILABLE)),
                                                                    user__is_active=True)
-        self.fields['song_part'].queryset = SongPart.objects.filter(song__in_gig_rotation=True).order_by('song', '_order')
+        self.fields['song_part'].queryset = SongPart.objects.filter(
+            song__band_songs__band__slug="prsb",
+            song__band_songs__in_gig_rotation=True,
+            song__band_songs__is_active=True,
+        ).distinct().order_by('song', '_order')
         self.fields['gig_instrument'].queryset = GigInstrument.objects.filter(gig_id=self.gig_id)
         self.fields['performance_readiness'].required = False
 
