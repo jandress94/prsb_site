@@ -2,8 +2,9 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1692,4 +1693,33 @@ class BandModelTestCase(TestCase):
         self.gig.bands.add(band)
         with self.assertRaises(ValidationError):
             band.delete()
+
+
+class PrsbBackfillMigrationTestCase(TransactionTestCase):
+    def _remigrate_through_backfill(self, seed_historical_rows=False):
+        call_command("migrate", "band", "0033", verbosity=0, interactive=False)
+        if seed_historical_rows:
+            Song.objects.create(title="Backfill Song", composer="X", in_gig_rotation=True)
+            User.objects.create_user(username="backfill_user", first_name="Back", last_name="Fill")
+            Gig.objects.create(
+                name="Backfill Gig",
+                start_datetime=timezone.now(),
+                end_datetime=timezone.now() + timedelta(hours=2),
+            )
+        call_command("migrate", "band", "0034", verbosity=0, interactive=False)
+
+    def test_prsb_band_exists_after_migrate(self):
+        self._remigrate_through_backfill()
+        band = Band.objects.get(slug="prsb")
+        self.assertEqual(band.name, "PRSB")
+        self.assertTrue(band.is_active)
+
+    def test_historical_rows_attach_to_prsb(self):
+        self._remigrate_through_backfill(seed_historical_rows=True)
+        band = Band.objects.get(slug="prsb")
+        self.assertTrue(band.is_active)
+        self.assertEqual(band.name, "PRSB")
+        self.assertEqual(BandSong.objects.filter(band=band, is_active=True).count(), Song.objects.count())
+        self.assertEqual(BandMembership.objects.filter(band=band, is_active=True).count(), BandMember.objects.count())
+        self.assertFalse(Gig.objects.exclude(bands=band).exists())
 

@@ -4,6 +4,34 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def attach_prsb(apps, schema_editor):
+    Band = apps.get_model("band", "Band")
+    BandSong = apps.get_model("band", "BandSong")
+    BandMembership = apps.get_model("band", "BandMembership")
+    Song = apps.get_model("band", "Song")
+    BandMember = apps.get_model("band", "BandMember")
+    Gig = apps.get_model("band", "Gig")
+    DrumKitCoverPlayer = apps.get_model("band", "DrumKitCoverPlayer")
+    BandSpecialDate = apps.get_model("band", "BandSpecialDate")
+    band, _ = Band.objects.get_or_create(slug="prsb", defaults={"name": "PRSB", "is_active": True})
+    for song in Song.objects.all():
+        BandSong.objects.get_or_create(
+            band=band, song=song,
+            defaults={"in_gig_rotation": song.in_gig_rotation, "is_active": True},
+        )
+    for member in BandMember.objects.all():
+        BandMembership.objects.get_or_create(band=band, member=member, defaults={"is_active": True})
+    for gig in Gig.objects.all():
+        gig.bands.add(band)
+    DrumKitCoverPlayer.objects.filter(band__isnull=True).update(band=band)
+    BandSpecialDate.objects.filter(band__isnull=True).update(band=band)
+
+
+def detach_prsb(apps, schema_editor):
+    Band = apps.get_model("band", "Band")
+    Band.objects.filter(slug="prsb").delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -51,14 +79,20 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='bandspecialdate',
             name='band',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to='band.band'),
-            preserve_default=False,
+            field=models.ForeignKey(
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                to='band.band',
+            ),
         ),
         migrations.AddField(
             model_name='drumkitcoverplayer',
             name='band',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, to='band.band'),
-            preserve_default=False,
+            field=models.ForeignKey(
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                to='band.band',
+            ),
         ),
         migrations.AddField(
             model_name='gig',
@@ -69,10 +103,6 @@ class Migration(migrations.Migration):
             model_name='gigsetlistentry',
             name='staffing_band',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='staffed_entries', to='band.band'),
-        ),
-        migrations.AddConstraint(
-            model_name='drumkitcoverplayer',
-            constraint=models.UniqueConstraint(fields=('band', 'member'), name='unique_drum_kit_cover_player'),
         ),
         migrations.AddField(
             model_name='bandmembership',
@@ -101,5 +131,20 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='bandsong',
             constraint=models.UniqueConstraint(fields=('band', 'song'), name='unique_band_song'),
+        ),
+        migrations.RunPython(attach_prsb, detach_prsb),
+        migrations.AlterField(
+            model_name='bandspecialdate',
+            name='band',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='band.band'),
+        ),
+        migrations.AlterField(
+            model_name='drumkitcoverplayer',
+            name='band',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='band.band'),
+        ),
+        migrations.AddConstraint(
+            model_name='drumkitcoverplayer',
+            constraint=models.UniqueConstraint(fields=('band', 'member'), name='unique_drum_kit_cover_player'),
         ),
     ]
