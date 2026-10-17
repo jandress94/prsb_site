@@ -4,9 +4,9 @@
 {% block title %}{{ gig.name }} | Part Assignments | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
-    > <a href={% url 'band:gig_list' %}>Gigs</a>
-    > <a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a>
+    <a href={% url 'band:band_home' band.slug %}>Home</a>
+    > <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' band.slug gig.id %}>{{ gig.name }}</a>
     > Part Assignments
 {% endblock %}
 
@@ -14,7 +14,7 @@
     <h1>{{gig.name}}</h1>
 
     <h2>Part Assignment Overrides</h2>
-    <a href={% url 'band:gig_part_assignment_override_create' gig.id %}>Add new Part Assignment Override</a>
+    <a href={% url 'band:gig_part_assignment_override_create' band.slug gig.id %}>Add new Part Assignment Override</a>
     {% if part_assignment_overrides %}
         <table class="sortable">
             <thead>
@@ -36,7 +36,7 @@
                         <td sorttable_customkey={{ pao.gig_instrument.instrument.order }}>{{ pao.gig_instrument.instrument }}</td>
                         <td>{{ pao.member }}</td>
                         <td sorttable_customkey=100>
-                            <form method="post" action="{% url 'band:gig_part_assignment_override_delete' gig.id pao.id %}">
+                            <form method="post" action="{% url 'band:gig_part_assignment_override_delete' band.slug gig.id pao.id %}">
                                 {% csrf_token %}
                                 <button type="submit" aria-label="Delete override">❌</button>
                             </form>
@@ -163,7 +163,7 @@
                 </tbody>
             </table>
 
-            <form method="post" action="{% url 'band:gig_setlist_add_song' gig_id=gig.id song_id=gpa.song.id %}" style="display:inline">
+            <form method="post" action="{% url 'band:gig_setlist_add_song' slug=band.slug gig_id=gig.id song_id=gpa.song.id %}" style="display:inline">
                 {% csrf_token %}
                 <button type="submit">Add to Setlist</button>
             </form>
@@ -211,10 +211,10 @@
     <h2>Options and Settings</h2>
     <div>
         <p>
-            <a href="{% url 'band:gig_part_assignment_print' gig.id %}?order=setlist">Print Setlist Part Assignments</a>
+            <a href="{% url 'band:gig_part_assignment_print' band.slug gig.id %}?order=setlist">Print Setlist Part Assignments</a>
         </p>
         <p>
-            <a href="{% url 'band:gig_part_assignment_by_member' gig.id %}">Part Assignments by Member</a>
+            <a href="{% url 'band:gig_part_assignment_by_member' band.slug gig.id %}">Part Assignments by Member</a>
         </p>
         <p>
             <label for="hide-unutilized">Hide Unutilized:</label>

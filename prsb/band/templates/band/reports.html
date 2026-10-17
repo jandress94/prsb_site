@@ -1,13 +1,13 @@
 {% extends "band/base.html" %}
 {% block title %}Reports | PRSB{% endblock %}
 {% block nav %}
-    <a href="{% url 'band:index' %}">Home</a>
+    <a href="{% url 'band:band_home' band.slug %}">Home</a>
     > Reports
 {% endblock %}
 {% block content %}
     <h2>Reports</h2>
     <ul>
-    <li><a href="{% url 'band:coverage_risk' %}">Coverage Risk</a> — which rotation songs/parts are most fragile given attendance-weighted coverage</li>
-    <li><a href="{% url 'band:dietary_restrictions' %}">Dietary Restrictions</a> — members’ dietary restrictions (login required; personal information)</li>
+    <li><a href="{% url 'band:coverage_risk' band.slug %}">Coverage Risk</a> — which rotation songs/parts are most fragile given attendance-weighted coverage</li>
+    <li><a href="{% url 'band:dietary_restrictions' band.slug %}">Dietary Restrictions</a> — members’ dietary restrictions (login required; personal information)</li>
     </ul>
 {% endblock %}

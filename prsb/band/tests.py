@@ -23,6 +23,14 @@ from scripts.gig_part_assignment import (
 )
 from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
 from band.views import GigPartAssignmentOverrideForm
+PRSB_SLUG = "prsb"
+
+
+def _link_gig_to_prsb(gig):
+    gig.bands.add(Band.objects.get(slug=PRSB_SLUG))
+    return gig
+
+
 from band.dietary_restrictions import (
     STATUS_NO_STATUS,
     dietary_restriction_members,
@@ -56,7 +64,7 @@ class SongHasSoloUpdateTestCase(TestCase):
         )
 
     def test_song_update_can_set_has_solo(self):
-        url = reverse("band:song_update", kwargs={"pk": self.song.pk})
+        url = reverse("band:song_update", kwargs={"slug": PRSB_SLUG, "pk": self.song.pk})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         data = {
@@ -349,6 +357,7 @@ class GigPartAssignmentSoloMarkerTestCase(TestCase):
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
         )
+        _link_gig_to_prsb(cls.gig)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.trumpet, gig_quantity=1)
         GigAttendance.objects.create(
             gig=cls.gig, member=cls.alice.bandmember, status=GigAttendance.AVAILABLE,
@@ -357,7 +366,7 @@ class GigPartAssignmentSoloMarkerTestCase(TestCase):
 
     def test_gig_part_assignments_mark_soloist_member(self):
         response = self.client.get(
-            reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
+            reverse("band:gig_part_assignments_detail", kwargs={"slug": PRSB_SLUG, "pk": self.gig.pk})
         )
         self.assertContains(
             response, 'Alice M <span class="solo-marker" title="Can solo">(solo)</span>', html=False
@@ -365,7 +374,7 @@ class GigPartAssignmentSoloMarkerTestCase(TestCase):
 
     def test_gig_part_assignments_do_not_mark_solo_parts(self):
         response = self.client.get(
-            reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
+            reverse("band:gig_part_assignments_detail", kwargs={"slug": PRSB_SLUG, "pk": self.gig.pk})
         )
         self.assertEqual(response.content.decode().count("solo-marker"), 1)
 
@@ -402,7 +411,7 @@ class MemberDetailSoloColumnTestCase(TestCase):
 
     def test_member_detail_shows_solo_column_marker(self):
         response = self.client.get(
-            reverse("band:member_detail", kwargs={"pk": self.member.bandmember.pk})
+            reverse("band:member_detail", kwargs={"slug": PRSB_SLUG, "pk": self.member.bandmember.pk})
         )
         self.assertContains(response, "<th>Solo</th>", html=False)
         self.assertContains(
@@ -425,6 +434,7 @@ class GigRecommendationGroupingTestCase(TestCase):
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
         )
+        _link_gig_to_prsb(cls.gig)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.drums, gig_quantity=1)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.guitar, gig_quantity=1)
 
@@ -468,7 +478,7 @@ class GigRecommendationGroupingTestCase(TestCase):
         )
 
     def test_recommendations_are_grouped_by_part_coverage(self):
-        response = self.client.get(reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
+        response = self.client.get(reverse('band:gig_part_assignments_detail', kwargs={"slug": PRSB_SLUG, 'pk': self.gig.pk}))
         content = response.content.decode()
 
         self.assertContains(response, "All Parts Covered")
@@ -478,7 +488,7 @@ class GigRecommendationGroupingTestCase(TestCase):
         self.assertLess(content.index("Missing Parts"), content.index("Incomplete Song"))
 
     def test_group_heading_renders_once_per_group(self):
-        response = self.client.get(reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
+        response = self.client.get(reverse('band:gig_part_assignments_detail', kwargs={"slug": PRSB_SLUG, 'pk': self.gig.pk}))
         content = response.content.decode()
 
         self.assertEqual(content.count("All Parts Covered"), 1)
@@ -508,6 +518,7 @@ class GigPartAssignmentOverrideTestCase(TestCase):
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
         )
+        _link_gig_to_prsb(cls.gig)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.drums, gig_quantity=1)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.guitar, gig_quantity=1)
 
@@ -628,10 +639,10 @@ class GigPartAssignmentOverrideTestCase(TestCase):
         )
 
         response = self.client.post(
-            reverse('band:gig_part_assignment_override_delete', kwargs={'pk': self.gig.pk, 'override_id': override.pk}),
+            reverse('band:gig_part_assignment_override_delete', kwargs={"slug": PRSB_SLUG, 'pk': self.gig.pk, 'override_id': override.pk}),
         )
 
-        self.assertRedirects(response, reverse('band:gig_part_assignments_detail', kwargs={'pk': self.gig.pk}))
+        self.assertRedirects(response, reverse('band:gig_part_assignments_detail', kwargs={"slug": PRSB_SLUG, 'pk': self.gig.pk}))
         self.assertFalse(GigPartAssignmentOverride.objects.filter(pk=override.pk).exists())
 
 
@@ -1005,48 +1016,52 @@ class CoverageRiskViewsTestCase(TestCase):
 
     def test_reports_hub_ok(self):
         self.client.login(username="viewer", password="pass")
-        resp = self.client.get(reverse("band:reports"))
+        resp = self.client.get(reverse("band:reports", kwargs={"slug": PRSB_SLUG}))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Coverage Risk")
 
     def test_coverage_risk_ok_default_n(self):
         self.client.login(username="viewer", password="pass")
-        resp = self.client.get(reverse("band:coverage_risk"))
+        resp = self.client.get(reverse("band:coverage_risk", kwargs={"slug": PRSB_SLUG}))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["lookback"], 10)
 
     def test_coverage_risk_n_query_param(self):
         self.client.login(username="viewer", password="pass")
-        resp = self.client.get(reverse("band:coverage_risk"), {"n": "5"})
+        resp = self.client.get(reverse("band:coverage_risk", kwargs={"slug": PRSB_SLUG}), {"n": "5"})
         self.assertEqual(resp.context["lookback"], 5)
 
     def test_coverage_risk_invalid_n_defaults(self):
         self.client.login(username="viewer", password="pass")
         for bad in ["0", "-3", "abc"]:
-            resp = self.client.get(reverse("band:coverage_risk"), {"n": bad})
+            resp = self.client.get(reverse("band:coverage_risk", kwargs={"slug": PRSB_SLUG}), {"n": bad})
             self.assertEqual(resp.context["lookback"], 10, msg=bad)
 
     def test_coverage_risk_huge_n_clamped(self):
         self.client.login(username="viewer", password="pass")
-        resp = self.client.get(reverse("band:coverage_risk"), {"n": "999999"})
+        resp = self.client.get(reverse("band:coverage_risk", kwargs={"slug": PRSB_SLUG}), {"n": "999999"})
         self.assertEqual(resp.context["lookback"], 200)
 
 
 class GigListPastPaginationTestCase(TestCase):
     def _past_gig(self, days_ago, name=None):
         start = timezone.now() - timedelta(days=days_ago)
-        return Gig.objects.create(
-            name=name or f"Past-{days_ago}",
-            start_datetime=start,
-            end_datetime=start + timedelta(hours=2),
+        return _link_gig_to_prsb(
+            Gig.objects.create(
+                name=name or f"Past-{days_ago}",
+                start_datetime=start,
+                end_datetime=start + timedelta(hours=2),
+            )
         )
 
     def _upcoming_gig(self, days_ahead, name=None):
         start = timezone.now() + timedelta(days=days_ahead)
-        return Gig.objects.create(
-            name=name or f"Upcoming-{days_ahead}",
-            start_datetime=start,
-            end_datetime=start + timedelta(hours=2),
+        return _link_gig_to_prsb(
+            Gig.objects.create(
+                name=name or f"Upcoming-{days_ahead}",
+                start_datetime=start,
+                end_datetime=start + timedelta(hours=2),
+            )
         )
 
     def test_first_page_has_at_most_ten_past_gigs(self):
@@ -1054,7 +1069,7 @@ class GigListPastPaginationTestCase(TestCase):
             self._past_gig(i, name=f"P{i}")
         self._upcoming_gig(1, name="U1")
 
-        resp = self.client.get(reverse("band:gig_list"))
+        resp = self.client.get(reverse("band:gig_list", kwargs={"slug": PRSB_SLUG}))
         self.assertEqual(resp.status_code, 200)
         past = list(resp.context["past_gigs"])
         self.assertEqual(len(past), 10)
@@ -1069,7 +1084,7 @@ class GigListPastPaginationTestCase(TestCase):
         for i in range(1, 16):
             self._past_gig(i, name=f"P{i}")
 
-        resp = self.client.get(reverse("band:gig_list"), {"page": "2"})
+        resp = self.client.get(reverse("band:gig_list", kwargs={"slug": PRSB_SLUG}), {"page": "2"})
         self.assertEqual(resp.status_code, 200)
         past = list(resp.context["past_gigs"])
         self.assertEqual([g.name for g in past], [f"P{i}" for i in range(11, 16)])
@@ -1081,7 +1096,7 @@ class GigListPastPaginationTestCase(TestCase):
 
         for bad in ("999", "abc", "-1", "0"):
             with self.subTest(page=bad):
-                resp = self.client.get(reverse("band:gig_list"), {"page": bad})
+                resp = self.client.get(reverse("band:gig_list", kwargs={"slug": PRSB_SLUG}), {"page": bad})
                 self.assertEqual(resp.status_code, 200)
                 self.assertIn("page_obj", resp.context)
                 self.assertTrue(1 <= resp.context["page_obj"].number <= 2)
@@ -1090,7 +1105,7 @@ class GigListPastPaginationTestCase(TestCase):
         for i in range(1, 12):
             self._past_gig(i, name=f"P{i}")
 
-        resp = self.client.get(reverse("band:gig_list"))
+        resp = self.client.get(reverse("band:gig_list", kwargs={"slug": PRSB_SLUG}))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Previous", count=0)  # page 1: no Previous
         self.assertContains(resp, "Next")
@@ -1099,7 +1114,7 @@ class GigListPastPaginationTestCase(TestCase):
         # at minimum page 2 link exists and "1" appears as current.
         self.assertContains(resp, "<strong>1</strong>")
 
-        resp2 = self.client.get(reverse("band:gig_list"), {"page": "2"})
+        resp2 = self.client.get(reverse("band:gig_list", kwargs={"slug": PRSB_SLUG}), {"page": "2"})
         self.assertContains(resp2, "Previous")
         self.assertContains(resp2, 'href="?page=1"')
         self.assertContains(resp2, "Next", count=0)
@@ -1109,7 +1124,7 @@ class GigListPastPaginationTestCase(TestCase):
         for i in range(1, 6):
             self._past_gig(i, name=f"P{i}")
 
-        resp = self.client.get(reverse("band:gig_list"))
+        resp = self.client.get(reverse("band:gig_list", kwargs={"slug": PRSB_SLUG}))
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, "Previous")
         self.assertNotContains(resp, "Next")
@@ -1425,6 +1440,7 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
         )
+        _link_gig_to_prsb(cls.gig)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.kit, gig_quantity=1)
         GigInstrument.objects.create(gig=cls.gig, instrument=cls.lead, gig_quantity=2)
 
@@ -1462,7 +1478,7 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
 
     def test_gig_part_assignments_mark_cover_member(self):
         response = self.client.get(
-            reverse("band:gig_part_assignments_detail", kwargs={"pk": self.gig.pk})
+            reverse("band:gig_part_assignments_detail", kwargs={"slug": PRSB_SLUG, "pk": self.gig.pk})
         )
         self.assertContains(
             response,
@@ -1696,10 +1712,10 @@ class DietaryRestrictionsViewTestCase(TestCase):
 
     def _get(self, **params):
         self.client.login(username="dr_viewer", password="pass")
-        return self.client.get(reverse("band:dietary_restrictions"), params)
+        return self.client.get(reverse("band:dietary_restrictions", kwargs={"slug": PRSB_SLUG}), params)
 
     def test_anonymous_redirects_to_login(self):
-        resp = self.client.get(reverse("band:dietary_restrictions"))
+        resp = self.client.get(reverse("band:dietary_restrictions", kwargs={"slug": PRSB_SLUG}))
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/accounts/login/", resp.url)
 
@@ -1763,8 +1779,8 @@ class DietaryRestrictionsViewTestCase(TestCase):
 
     def test_hub_links_to_report(self):
         self.client.login(username="dr_viewer", password="pass")
-        resp = self.client.get(reverse("band:reports"))
-        self.assertContains(resp, reverse("band:dietary_restrictions"))
+        resp = self.client.get(reverse("band:reports", kwargs={"slug": PRSB_SLUG}))
+        self.assertContains(resp, reverse("band:dietary_restrictions", kwargs={"slug": PRSB_SLUG}))
         self.assertContains(resp, "Dietary Restrictions")
 
     def test_caption_uses_status_labels(self):
@@ -1861,6 +1877,43 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
 
         special = BandSpecialDate.objects.get(pk=special_id)
         self.assertEqual(special.band, band)
+
+
+class BandRoutingTestCase(TestCase):
+    def test_one_active_band_redirects_home(self):
+        response = self.client.get(reverse("band:home"))
+        self.assertRedirects(response, reverse("band:band_home", kwargs={"slug": "prsb"}))
+
+    def test_inactive_band_is_hidden_but_url_opens(self):
+        Band.objects.create(name="Old", slug="old", is_active=False)
+        home = self.client.get(reverse("band:band_home", kwargs={"slug": "prsb"}))
+        self.assertNotContains(home, reverse("band:band_home", kwargs={"slug": "old"}))
+        opened = self.client.get(reverse("band:band_home", kwargs={"slug": "old"}))
+        self.assertEqual(opened.status_code, 200)
+
+    def test_unknown_band_is_404(self):
+        response = self.client.get("/bands/missing/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_old_gig_list_is_gone(self):
+        response = self.client.get("/gigs/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_gig_is_listed_under_every_band_on_it(self):
+        other = Band.objects.create(name="Guest", slug="guest")
+        gig = Gig.objects.create(
+            name="Shared Gig",
+            start_datetime=timezone.now() + timedelta(days=1),
+            end_datetime=timezone.now() + timedelta(days=1, hours=2),
+        )
+        prsb = Band.objects.get(slug="prsb")
+        gig.bands.add(prsb, other)
+        for slug in ("prsb", "guest"):
+            response = self.client.get(reverse("band:gig_list", kwargs={"slug": slug}))
+            self.assertContains(response, "Shared Gig")
+        outsider = Band.objects.create(name="Outsider", slug="outsider")
+        missing = self.client.get(reverse("band:gig_detail", kwargs={"slug": outsider.slug, "pk": gig.pk}))
+        self.assertEqual(missing.status_code, 404)
 
 
 class BandSongRotationTestCase(TestCase):

@@ -14,52 +14,120 @@ urlpatterns = [
     path("accounts/login/", LoginView.as_view(template_name="band/registration/login.html"), name="login"),
     path("accounts/logout/", LogoutView.as_view(next_page="band:login"), name="logout"),
 
-    path("", views.index, name='index'),
+    path("", views.home, name="home"),
+    path("bands/<slug:slug>/", views.BandHomeView.as_view(), name="band_home"),
+    path("bands/<slug:slug>/members/", views.MemberListView.as_view(), name="member_list"),
+    path("bands/<slug:slug>/members/<int:pk>/", views.MemberDetailView.as_view(), name="member_detail"),
+    path(
+        "bands/<slug:slug>/members/<int:member_id>/part-assignments/create/",
+        views.MemberPartAssignmentCreateView.as_view(),
+        name="member_part_assignment_create",
+    ),
+    path(
+        "bands/<slug:slug>/members/<int:member_id>/part-assignments/<int:pk>/update/",
+        views.MemberPartAssignmentUpdateView.as_view(),
+        name="member_part_assignment_update",
+    ),
+
+    path("bands/<slug:slug>/songs/", views.SongListView.as_view(), name="song_list"),
+    path("bands/<slug:slug>/songs/create/", views.SongCreateView.as_view(), name="song_create"),
+    path("bands/<slug:slug>/songs/<int:pk>/", views.SongDetailView.as_view(), name="song_detail"),
+    path("bands/<slug:slug>/songs/<int:pk>/update/", views.SongUpdateView.as_view(), name="song_update"),
+    path(
+        "bands/<slug:slug>/songs/<int:song_id>/part-assignments/create/",
+        views.SongPartAssignmentCreateView.as_view(),
+        name="song_part_assignment_create",
+    ),
+    path(
+        "bands/<slug:slug>/songs/<int:song_id>/part-assignments/<int:pk>/update/",
+        views.SongPartAssignmentUpdateView.as_view(),
+        name="song_part_assignment_update",
+    ),
+
+    path("bands/<slug:slug>/part-assignments/", views.PartAssignmentListView.as_view(), name="part_assignment_list"),
+    path(
+        "bands/<slug:slug>/part-assignments/create/",
+        views.PartAssignmentCreateView.as_view(),
+        name="part_assignment_create",
+    ),
+    path(
+        "bands/<slug:slug>/part-assignments/<int:pk>/update/",
+        views.PartAssignmentUpdateView.as_view(),
+        name="part_assignment_update",
+    ),
+
+    path("bands/<slug:slug>/gigs/", views.GigListView.as_view(), name="gig_list"),
+    path("bands/<slug:slug>/gigs/create/", views.GigCreateView.as_view(), name="gig_create"),
+    path("bands/<slug:slug>/gigs/<int:pk>/", views.GigDetailView.as_view(), name="gig_detail"),
+    path("bands/<slug:slug>/gigs/<int:pk>/update/", views.GigUpdateView.as_view(), name="gig_update"),
+    path(
+        "bands/<slug:slug>/gigs/<int:gig_id>/availability/update",
+        views.GigAvailabilityUpdateView.as_view(),
+        name="gig_availability_update",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:pk>/gig-part-assignments/",
+        views.GigPartAssignmentsDetailView.as_view(),
+        name="gig_part_assignments_detail",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:pk>/gig-part-assignments/create",
+        views.GigPartAssignmentOverrideCreateView.as_view(),
+        name="gig_part_assignment_override_create",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:pk>/gig-part-assignments/overrides/<int:override_id>/delete",
+        views.GigPartAssignmentOverrideDeleteView.as_view(),
+        name="gig_part_assignment_override_delete",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:pk>/gig-part-assignments/print",
+        views.GigPartAssignmentPrintView.as_view(),
+        name="gig_part_assignment_print",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:pk>/gig-part-assignments/by-member",
+        views.GigPartAssignmentByMemberView.as_view(),
+        name="gig_part_assignment_by_member",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:gig_id>/setlist/update",
+        views.GigSetlistUpdateView.as_view(),
+        name="gig_setlist_update",
+    ),
+    path(
+        "bands/<slug:slug>/gigs/<int:gig_id>/setlist/add-song/<int:song_id>",
+        views.GigSetlistAddSongView.as_view(),
+        name="gig_setlist_add_song",
+    ),
 
     path("profile/", views.ProfileDetailView.as_view(), name="profile_detail"),
     path("profile/update", views.ProfileUpdateView.as_view(), name="profile_update"),
-    path("profile/password-change", PasswordChangeView.as_view(template_name="band/registration/password_change_form.html", success_url=reverse_lazy("band:password_change_done")), name="password_change"),
-    path("profile/password-change/done", PasswordChangeDoneView.as_view(template_name="band/registration/password_change_done.html"), name="password_change_done"),
-
-    path("members/", views.MemberListView.as_view(), name="member_list"),
-    path("members/<int:pk>/", views.MemberDetailView.as_view(), name="member_detail"),
-    # path("members/<int:pk>/update/", views.MemberUpdateView.as_view(), name="member_update"),
-    path("members/<int:member_id>/part-assignments/create/", views.MemberPartAssignmentCreateView.as_view(), name='member_part_assignment_create'),
-    path("members/<int:member_id>/part-assignments/<int:pk>/update/",
-         views.MemberPartAssignmentUpdateView.as_view(), name="member_part_assignment_update"),
-
-    path("songs/", views.SongListView.as_view(), name="song_list"),
-    path("songs/create/", views.SongCreateView.as_view(), name="song_create"),
-    path("songs/<int:pk>/", views.SongDetailView.as_view(), name="song_detail"),
-    path("songs/<int:pk>/update/", views.SongUpdateView.as_view(), name="song_update"),
-    path("songs/<int:song_id>/part-assignments/create/", views.SongPartAssignmentCreateView.as_view(), name='song_part_assignment_create'),
-    path("songs/<int:song_id>/part-assignments/<int:pk>/update/",
-         views.SongPartAssignmentUpdateView.as_view(), name="song_part_assignment_update"),
-
-    path("part-assignments/", views.PartAssignmentListView.as_view(), name="part_assignment_list"),
-    path("part-assignments/create/", views.PartAssignmentCreateView.as_view(), name="part_assignment_create"),
-    path("part-assignments/<int:pk>/update/", views.PartAssignmentUpdateView.as_view(), name="part_assignment_update"),
-
-    path("gigs/", views.GigListView.as_view(), name="gig_list"),
-    path("gigs/create/", views.GigCreateView.as_view(), name="gig_create"),
-    path("gigs/<int:pk>/", views.GigDetailView.as_view(), name="gig_detail"),
-    path("gigs/<int:pk>/update/", views.GigUpdateView.as_view(), name="gig_update"),
-    path("gigs/<int:gig_id>/availability/update", views.GigAvailabilityUpdateView.as_view(), name="gig_availability_update"),
-    path("gigs/<int:pk>/gig-part-assignments/", views.GigPartAssignmentsDetailView.as_view(), name="gig_part_assignments_detail"),
-    path("gigs/<int:pk>/gig-part-assignments/create", views.GigPartAssignmentOverrideCreateView.as_view(), name="gig_part_assignment_override_create"),
-    path("gigs/<int:pk>/gig-part-assignments/overrides/<int:override_id>/delete", views.GigPartAssignmentOverrideDeleteView.as_view(), name="gig_part_assignment_override_delete"),
-    path("gigs/<int:pk>/gig-part-assignments/print", views.GigPartAssignmentPrintView.as_view(), name="gig_part_assignment_print"),
-    path("gigs/<int:pk>/gig-part-assignments/by-member", views.GigPartAssignmentByMemberView.as_view(), name="gig_part_assignment_by_member"),
-    path("gigs/<int:gig_id>/setlist/update", views.GigSetlistUpdateView.as_view(), name="gig_setlist_update"),
-    path("gigs/<int:gig_id>/setlist/add-song/<int:song_id>", views.GigSetlistAddSongView.as_view(), name='gig_setlist_add_song'),
+    path(
+        "profile/password-change",
+        PasswordChangeView.as_view(
+            template_name="band/registration/password_change_form.html",
+            success_url=reverse_lazy("band:password_change_done"),
+        ),
+        name="password_change",
+    ),
+    path(
+        "profile/password-change/done",
+        PasswordChangeDoneView.as_view(template_name="band/registration/password_change_done.html"),
+        name="password_change_done",
+    ),
 
     path("instruments/", views.InstrumentListView.as_view(), name="instrument_list"),
 
-    path("reports/", views.ReportsView.as_view(), name="reports"),
-    path("reports/coverage-risk/", views.CoverageRiskView.as_view(), name="coverage_risk"),
-    path("reports/dietary-restrictions/", views.DietaryRestrictionsView.as_view(), name="dietary_restrictions"),
+    path("bands/<slug:slug>/reports/", views.ReportsView.as_view(), name="reports"),
+    path("bands/<slug:slug>/reports/coverage-risk/", views.CoverageRiskView.as_view(), name="coverage_risk"),
+    path(
+        "bands/<slug:slug>/reports/dietary-restrictions/",
+        views.DietaryRestrictionsView.as_view(),
+        name="dietary_restrictions",
+    ),
 
     path("health/", views.health_check),
 
-    path('api/instruments/', views.get_instruments, name='api_instruments'),
+    path("api/instruments/", views.get_instruments, name="api_instruments"),
 ]

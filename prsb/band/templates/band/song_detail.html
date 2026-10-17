@@ -4,15 +4,15 @@
 {% block title %}{{ song.title }} | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
-    > <a href={% url 'band:song_list' %}>Songs</a>
+    <a href={% url 'band:band_home' band.slug %}>Home</a>
+    > <a href={% url 'band:song_list' band.slug %}>Songs</a>
     > {{ song.title }}
 {% endblock %}
 
 {% block content %}
     <h1>{{song.title}}</h1>
 
-    <a href={% url 'band:song_update' song.id %}>Edit Song Information</a>
+    <a href={% url 'band:song_update' band.slug song.id %}>Edit Song Information</a>
 
     <div>
         <p>Composer: {{ song.composer }}</p>
@@ -33,7 +33,7 @@
     <div>
         <h2>Part Assignments</h2>
 
-        <a href={% url 'band:song_part_assignment_create' song.pk %}>New Part Assignment</a>
+        <a href={% url 'band:song_part_assignment_create' band.slug song.pk %}>New Part Assignment</a>
 
         <table class="sortable">
             <thead>
@@ -61,7 +61,7 @@
                         <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                         <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
                         <td>{{ part_assignment.member.user.get_full_name }}{% if part_assignment.can_solo %} <span class="solo-marker" title="Can solo">(solo)</span>{% endif %}</td>
-                        <td><a href={% url 'band:song_part_assignment_update' song_id=song.pk pk=part_assignment.pk %}>Edit</a></td>
+                        <td><a href={% url 'band:song_part_assignment_update' slug=band.slug song_id=song.pk pk=part_assignment.pk %}>Edit</a></td>
                     </tr>
                 {% endfor %}
 

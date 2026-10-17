@@ -2,12 +2,13 @@ from datetime import timedelta
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Exists, OuterRef, Subquery
 from django import forms
 from django.db import connection
 from django.forms import modelformset_factory, formset_factory, inlineformset_factory
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -27,13 +28,54 @@ from .dietary_restrictions import (
 )
 from .models import Song, Gig, GigAttendance, BandMember, PartAssignment, Instrument, SongPart, \
     GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
+from .scoping import active_bands, get_band, get_gig_for_band
 
 
-def index(request):
-    return render(request, "band/index.html")
+def home(request):
+    bands = list(active_bands())
+    if len(bands) == 1:
+        return redirect("band:band_home", slug=bands[0].slug)
+    return render(request, "band/home.html", {"bands": bands})
 
 
-class MemberListView(generic.ListView):
+class BandScopedMixin:
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        self.band = get_band(kwargs["slug"])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["band"] = self.band
+        context["active_bands"] = active_bands()
+        return context
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST" and not self.band.is_active and request.resolver_match.url_name in {
+            "song_create",
+            "member_link",
+            "gig_create",
+        }:
+            raise PermissionDenied("An inactive band cannot create new records.")
+        request.band = self.band
+        return super().dispatch(request, *args, **kwargs)
+
+    def band_context(self, **kwargs):
+        return {"band": self.band, "active_bands": active_bands(), **kwargs}
+
+
+class GigBandObjectMixin:
+    def get_object(self, queryset=None):
+        gig = super().get_object(queryset)
+        if not gig.bands.filter(pk=self.band.pk).exists():
+            raise Http404
+        return gig
+
+
+class BandHomeView(BandScopedMixin, generic.TemplateView):
+    template_name = "band/index.html"
+
+
+class MemberListView(BandScopedMixin, generic.ListView):
     def get_queryset(self):
         return BandMember.objects.filter(user__is_active=True).order_by('user__first_name', 'user__last_name')
 
@@ -42,7 +84,7 @@ def get_missing_songs_for_member(member: BandMember):
     return Song.objects.filter(~Exists(PartAssignment.objects.filter(member=member, song_part__song=OuterRef("pk"))))
 
 
-class MemberDetailView(generic.DetailView):
+class MemberDetailView(BandScopedMixin, generic.DetailView):
     model = BandMember
 
     def get_context_data(self, **kwargs):
@@ -85,7 +127,7 @@ class ProfileUpdateView(generic.UpdateView):
         "tshirt_size",
     ]
     template_name = "band/profile_update.html"
-    success_url = reverse_lazy('band:index')
+    success_url = reverse_lazy("band:home")
 
     def get_object(self, queryset=None):
         # Get the BandMember instance for the currently logged-in user
@@ -102,11 +144,11 @@ class ProfileUpdateView(generic.UpdateView):
 #               'emergency_contact_phone']
 
 
-class SongListView(generic.ListView):
+class SongListView(BandScopedMixin, generic.ListView):
     model = Song
 
 
-class SongDetailView(generic.DetailView):
+class SongDetailView(BandScopedMixin, generic.DetailView):
     model = Song
 
     def get_context_data(self, **kwargs):
@@ -136,7 +178,7 @@ SongPartSoloFormSet = inlineformset_factory(
 )
 
 
-class SongUpdateView(generic.UpdateView):
+class SongUpdateView(BandScopedMixin, generic.UpdateView):
     model = Song
     template_name_suffix = '_update_form'
     fields = ['title',
@@ -169,14 +211,20 @@ class SongUpdateView(generic.UpdateView):
             return redirect(self.get_success_url())
         return self.render_to_response(self.get_context_data(form=form))
 
+    def get_success_url(self):
+        return reverse("band:song_detail", kwargs={"slug": self.band.slug, "pk": self.object.pk})
 
-class SongCreateView(generic.CreateView):
+
+class SongCreateView(BandScopedMixin, generic.CreateView):
     model = Song
     template_name_suffix = '_create_form'
     fields = ['title',
               'composer',
               'duration',
               'form']
+
+    def get_success_url(self):
+        return reverse("band:song_detail", kwargs={"slug": self.band.slug, "pk": self.object.pk})
 
 
 def get_missing_person_songs():
@@ -223,7 +271,7 @@ def get_missing_person_songs():
         return cursor.fetchall()
 
 
-class PartAssignmentListView(generic.ListView):
+class PartAssignmentListView(BandScopedMixin, generic.ListView):
     model = PartAssignment
 
     def get_queryset(self):
@@ -283,22 +331,22 @@ class PartAssignmentForm(forms.ModelForm):
         return cleaned_data
 
 
-class PartAssignmentCreateView(generic.CreateView):
+class PartAssignmentCreateView(BandScopedMixin, generic.CreateView):
     model = PartAssignment
     form_class = PartAssignmentForm
     template_name_suffix = '_create_form'
 
     def get_success_url(self):
-        return reverse("band:part_assignment_list")
+        return reverse("band:part_assignment_list", kwargs={"slug": self.band.slug})
 
 
-class PartAssignmentUpdateView(generic.UpdateView):
+class PartAssignmentUpdateView(BandScopedMixin, generic.UpdateView):
     model = PartAssignment
     form_class = PartAssignmentForm
     template_name_suffix = '_update_form'
 
 
-class MemberPartAssignmentCreateView(generic.CreateView):
+class MemberPartAssignmentCreateView(BandScopedMixin, generic.CreateView):
     model = PartAssignment
     form_class = PartAssignmentForm
     template_name_suffix = '_create_form'
@@ -309,10 +357,13 @@ class MemberPartAssignmentCreateView(generic.CreateView):
         return kwargs
 
     def get_success_url(self):
-        return reverse("band:member_detail", kwargs={"pk": self.kwargs['member_id']})
+        return reverse(
+            "band:member_detail",
+            kwargs={"slug": self.band.slug, "pk": self.kwargs["member_id"]},
+        )
 
 
-class MemberPartAssignmentUpdateView(generic.UpdateView):
+class MemberPartAssignmentUpdateView(BandScopedMixin, generic.UpdateView):
     model = PartAssignment
     form_class = PartAssignmentForm
     template_name_suffix = '_update_form'
@@ -323,10 +374,13 @@ class MemberPartAssignmentUpdateView(generic.UpdateView):
         return kwargs
 
     def get_success_url(self):
-        return reverse("band:member_detail", kwargs={"pk": self.kwargs['member_id']})
+        return reverse(
+            "band:member_detail",
+            kwargs={"slug": self.band.slug, "pk": self.kwargs["member_id"]},
+        )
 
 
-class SongPartAssignmentCreateView(generic.CreateView):
+class SongPartAssignmentCreateView(BandScopedMixin, generic.CreateView):
     model = PartAssignment
     form_class = PartAssignmentForm
     template_name_suffix = '_create_form'
@@ -337,10 +391,13 @@ class SongPartAssignmentCreateView(generic.CreateView):
         return kwargs
 
     def get_success_url(self):
-        return reverse("band:song_detail", kwargs={"pk": self.kwargs['song_id']})
+        return reverse(
+            "band:song_detail",
+            kwargs={"slug": self.band.slug, "pk": self.kwargs["song_id"]},
+        )
 
 
-class SongPartAssignmentUpdateView(generic.UpdateView):
+class SongPartAssignmentUpdateView(BandScopedMixin, generic.UpdateView):
     model = PartAssignment
     form_class = PartAssignmentForm
     template_name_suffix = '_update_form'
@@ -351,19 +408,24 @@ class SongPartAssignmentUpdateView(generic.UpdateView):
         return kwargs
 
     def get_success_url(self):
-        return reverse("band:song_detail", kwargs={"pk": self.kwargs['song_id']})
+        return reverse(
+            "band:song_detail",
+            kwargs={"slug": self.band.slug, "pk": self.kwargs["song_id"]},
+        )
 
 
-class GigListView(generic.ListView):
+class GigListView(BandScopedMixin, generic.ListView):
     model = Gig
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['upcoming_gigs'] = Gig.objects.filter(
-            end_datetime__gte=timezone.now()
+            bands=self.band,
+            end_datetime__gte=timezone.now(),
         ).order_by('start_datetime')
         past_qs = Gig.objects.filter(
-            end_datetime__lt=timezone.now()
+            bands=self.band,
+            end_datetime__lt=timezone.now(),
         ).order_by('-start_datetime', '-pk')
         paginator = Paginator(past_qs, 10)
         page_obj = paginator.get_page(self.request.GET.get('page'))
@@ -412,7 +474,7 @@ GigInstrumentFormSet = inlineformset_factory(
 )
 
 
-class GigCreateView(generic.CreateView):
+class GigCreateView(BandScopedMixin, generic.CreateView):
     model = Gig
     form_class = GigForm
     template_name_suffix = '_update_form'
@@ -433,6 +495,7 @@ class GigCreateView(generic.CreateView):
 
         if form.is_valid() and instrument_formset.is_valid():
             self.object = form.save()  # Save the Gig instance
+            self.object.bands.add(self.band)
             instrument_formset.instance = self.object  # Link the formset to this Gig
             instrument_formset.save()  # Save the related GigInstrument instances
             return redirect(self.get_success_url())
@@ -440,10 +503,10 @@ class GigCreateView(generic.CreateView):
         return self.form_invalid(form)
 
     def get_success_url(self):
-        return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
+        return reverse("band:gig_detail", kwargs={"slug": self.band.slug, "pk": self.object.pk})
 
 
-class GigDetailView(generic.DetailView):
+class GigDetailView(BandScopedMixin, GigBandObjectMixin, generic.DetailView):
     model = Gig
 
     def get_context_data(self, **kwargs):
@@ -479,7 +542,7 @@ class GigDetailView(generic.DetailView):
         return context
 
 
-class GigUpdateView(generic.UpdateView):
+class GigUpdateView(BandScopedMixin, GigBandObjectMixin, generic.UpdateView):
     model = Gig
     form_class = GigForm
     template_name_suffix = '_update_form'
@@ -508,7 +571,7 @@ class GigUpdateView(generic.UpdateView):
         return self.form_invalid(form)
 
     def get_success_url(self):
-        return reverse("band:gig_detail", kwargs={'pk': self.object.pk})
+        return reverse("band:gig_detail", kwargs={"slug": self.band.slug, "pk": self.object.pk})
 
 
 class GigAvailabilityForm(forms.Form):
@@ -531,11 +594,11 @@ class GigAvailabilityForm(forms.Form):
 GigAvailabilityFormSet = formset_factory(GigAvailabilityForm, extra=0)
 
 
-class GigAvailabilityUpdateView(generic.View):
+class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
     template_name = 'band/gig_availability_update.html'
 
-    def get(self, request, gig_id):
-        gig = get_object_or_404(Gig, id=gig_id)
+    def get(self, request, gig_id, slug):
+        gig = get_gig_for_band(gig_id, self.band)
 
         existing_gig_attendance = GigAttendance.objects.filter(gig=gig)
         initial_data = [
@@ -560,10 +623,10 @@ class GigAvailabilityUpdateView(generic.View):
         initial_data = sorted(initial_data, key=lambda x: x['member'].user.get_full_name())
 
         formset = GigAvailabilityFormSet(initial=initial_data)
-        return render(request, self.template_name, {'gig': gig, 'formset': formset})
+        return render(request, self.template_name, self.band_context(gig=gig, formset=formset))
 
-    def post(self, request, gig_id):
-        gig = get_object_or_404(Gig, id=gig_id)
+    def post(self, request, gig_id, slug):
+        gig = get_gig_for_band(gig_id, self.band)
         formset = GigAvailabilityFormSet(request.POST)
 
         if formset.is_valid():
@@ -583,9 +646,9 @@ class GigAvailabilityUpdateView(generic.View):
             GigAttendance.objects.bulk_update([GigAttendance(id=form.cleaned_data['attendance_id'], status=form.cleaned_data['status']) for form in modified_gig_attendance], ['status'])
             GigAttendance.objects.filter(id__in=[form.cleaned_data['attendance_id'] for form in deleted_gig_attendance]).delete()
 
-            return redirect('band:gig_detail', pk=gig.id)
+            return redirect("band:gig_detail", slug=self.band.slug, pk=gig.id)
         else:
-            return render(request, self.template_name, {'formset': formset, 'gig': gig})
+            return render(request, self.template_name, self.band_context(formset=formset, gig=gig))
 
 
 class GigSetlistEntryForm(forms.ModelForm):
@@ -616,16 +679,16 @@ def gig_setlist_entry_formset(gig):
     )
 
 
-class GigSetlistUpdateView(generic.View):
+class GigSetlistUpdateView(BandScopedMixin, generic.View):
     template_name = 'band/gig_setlist_update.html'
 
-    def get(self, request, gig_id):
-        gig = get_object_or_404(Gig, id=gig_id)
+    def get(self, request, gig_id, slug):
+        gig = get_gig_for_band(gig_id, self.band)
         formset = gig_setlist_entry_formset(gig)(queryset=GigSetlistEntry.objects.filter(gig=gig))
-        return render(request, self.template_name, {'formset': formset, 'gig': gig})
+        return render(request, self.template_name, self.band_context(formset=formset, gig=gig))
 
-    def post(self, request, gig_id):
-        gig = get_object_or_404(Gig, id=gig_id)
+    def post(self, request, gig_id, slug):
+        gig = get_gig_for_band(gig_id, self.band)
         formset = gig_setlist_entry_formset(gig)(request.POST)
         formset.clean()
 
@@ -642,28 +705,34 @@ class GigSetlistUpdateView(generic.View):
                 form.instance._order = i
                 form.instance.save()
 
-            return redirect('band:gig_detail', pk=gig.id)
+            return redirect("band:gig_detail", slug=self.band.slug, pk=gig.id)
 
-        return render(request, self.template_name, {'formset': formset, 'gig': gig})
+        return render(request, self.template_name, self.band_context(formset=formset, gig=gig))
 
 
-class GigSetlistAddSongView(generic.View):
+class GigSetlistAddSongView(BandScopedMixin, generic.View):
     def post(self, request, *args, **kwargs):
-        gig_id = kwargs['gig_id']
-        setlist_entry = GigSetlistEntry(gig_id=gig_id, song_id=kwargs['song_id'])
+        gig_id = kwargs["gig_id"]
+        get_gig_for_band(gig_id, self.band)
+        setlist_entry = GigSetlistEntry(gig_id=gig_id, song_id=kwargs["song_id"])
         setlist_entry.save()
 
-        return HttpResponseRedirect(reverse("band:gig_part_assignments_detail", kwargs={'pk': gig_id}))
+        return HttpResponseRedirect(
+            reverse(
+                "band:gig_part_assignments_detail",
+                kwargs={"slug": self.band.slug, "pk": gig_id},
+            )
+        )
 
 
-class GigPartAssignmentsDetailView(generic.TemplateView):
+class GigPartAssignmentsDetailView(BandScopedMixin, generic.TemplateView):
     template_name = 'band/gig_part_assignments.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         gig_id = context['pk']
 
-        context['gig'] = gig = Gig.objects.get(id=gig_id)
+        context["gig"] = gig = get_gig_for_band(gig_id, self.band)
 
         context['part_assignment_overrides'] = GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
 
@@ -723,33 +792,43 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
         return cleaned_data
 
 
-class GigPartAssignmentOverrideCreateView(generic.CreateView):
+class GigPartAssignmentOverrideCreateView(BandScopedMixin, generic.CreateView):
     model = GigPartAssignmentOverride
     form_class = GigPartAssignmentOverrideForm
     template_name_suffix = '_create_form'
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs['gig_id'] = self.kwargs['pk']
-        kwargs['gig_name'] = Gig.objects.get(id=self.kwargs['pk']).name
+        gig = get_gig_for_band(self.kwargs["pk"], self.band)
+        kwargs["gig_id"] = gig.id
+        kwargs["gig_name"] = gig.name
         return kwargs
 
     def get_success_url(self):
-        return reverse("band:gig_part_assignments_detail", kwargs={"pk": self.kwargs['pk']})
+        return reverse(
+            "band:gig_part_assignments_detail",
+            kwargs={"slug": self.band.slug, "pk": self.kwargs["pk"]},
+        )
 
 
-class GigPartAssignmentOverrideDeleteView(generic.View):
-    def post(self, request, pk, override_id):
+class GigPartAssignmentOverrideDeleteView(BandScopedMixin, generic.View):
+    def post(self, request, pk, override_id, slug):
+        get_gig_for_band(pk, self.band)
         override = get_object_or_404(
             GigPartAssignmentOverride,
             pk=override_id,
             gig_instrument__gig_id=pk,
         )
         override.delete()
-        return HttpResponseRedirect(reverse("band:gig_part_assignments_detail", kwargs={'pk': pk}))
+        return HttpResponseRedirect(
+            reverse(
+                "band:gig_part_assignments_detail",
+                kwargs={"slug": self.band.slug, "pk": pk},
+            )
+        )
 
 
-class GigPartAssignmentPrintView(generic.TemplateView):
+class GigPartAssignmentPrintView(BandScopedMixin, generic.TemplateView):
     template_name = 'band/gig_part_assignment_print.html'
 
     @staticmethod
@@ -771,7 +850,7 @@ class GigPartAssignmentPrintView(generic.TemplateView):
         context = super().get_context_data(**kwargs)
         gig_id = context['pk']
 
-        context['gig'] = gig = Gig.objects.get(id=gig_id)
+        context["gig"] = gig = get_gig_for_band(gig_id, self.band)
 
         overrides = GigPartAssignmentOverride.objects.filter(
             gig_instrument__gig=gig).order_by('song_part__song', 'song_part', 'member')
@@ -787,14 +866,14 @@ class GigPartAssignmentPrintView(generic.TemplateView):
         return context
 
 
-class GigPartAssignmentByMemberView(generic.TemplateView):
+class GigPartAssignmentByMemberView(BandScopedMixin, generic.TemplateView):
     """Part assignments grouped by band member; each member's table has one row per song they play."""
     template_name = 'band/gig_part_assignment_by_member.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         gig_id = context['pk']
-        context['gig'] = gig = Gig.objects.get(id=gig_id)
+        context["gig"] = gig = get_gig_for_band(gig_id, self.band)
 
         overrides = GigPartAssignmentOverride.objects.filter(
             gig_instrument__gig=gig
@@ -849,11 +928,11 @@ def _parse_lookback(request) -> int:
     return min(n, MAX_LOOKBACK)
 
 
-class ReportsView(generic.TemplateView):
+class ReportsView(BandScopedMixin, generic.TemplateView):
     template_name = "band/reports.html"
 
 
-class CoverageRiskView(generic.TemplateView):
+class CoverageRiskView(BandScopedMixin, generic.TemplateView):
     template_name = "band/coverage_risk.html"
 
     def get_context_data(self, **kwargs):
@@ -864,7 +943,7 @@ class CoverageRiskView(generic.TemplateView):
         return context
 
 
-class DietaryRestrictionsView(LoginRequiredMixin, generic.TemplateView):
+class DietaryRestrictionsView(BandScopedMixin, LoginRequiredMixin, generic.TemplateView):
     template_name = "band/dietary_restrictions.html"
 
     def get_context_data(self, **kwargs):

@@ -5,21 +5,21 @@
 {% block title %}{{ gig.name }} | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
-    > <a href={% url 'band:gig_list' %}>Gigs</a>
+    <a href={% url 'band:band_home' band.slug %}>Home</a>
+    > <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
     > {{ gig.name }}
 {% endblock %}
 
 {% block content %}
     <h1>{{gig.name}}</h1>
-    <a href={% url 'band:gig_update' gig.id %}>Edit Gig Information</a>
+    <a href={% url 'band:gig_update' band.slug gig.id %}>Edit Gig Information</a>
     <p>Start: {{ gig.start_datetime|localtime }}</p>
     <p>End: {{ gig.end_datetime|localtime }}</p>
     <p>Address: {{ gig.address }}</p>
     <p>{{ gig.notes|safe }}</p>
 
     <h2>Band Member Availability</h2>
-    <a href={% url 'band:gig_availability_update' gig.id %}>Edit Member Availability</a>
+    <a href={% url 'band:gig_availability_update' band.slug gig.id %}>Edit Member Availability</a>
     <table>
         <thead>
             <tr>
@@ -60,7 +60,7 @@
     </table>
 
     <h2>Setlist</h2>
-    <a href={% url 'band:gig_setlist_update' gig.id %}>Edit Setlist</a>
+    <a href={% url 'band:gig_setlist_update' band.slug gig.id %}>Edit Setlist</a>
     <ol>
         {% for set_list_entry in setlist %}
             <li>{% if set_list_entry.song %}
@@ -90,6 +90,6 @@
 
     <h2>Part Assignments</h2>
     <p>
-        <a href={% url 'band:gig_part_assignments_detail' gig.id %}>See Part Assignments</a>
+        <a href={% url 'band:gig_part_assignments_detail' band.slug gig.id %}>See Part Assignments</a>
     </p>
 {% endblock %}

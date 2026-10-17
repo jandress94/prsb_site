@@ -17,6 +17,13 @@
 
 <body>
     <div id="content">
+        {% if active_bands %}
+        <p>
+            {% for switch_band in active_bands %}
+                <a href="{% url 'band:band_home' switch_band.slug %}">{{ switch_band.name }}</a>
+            {% endfor %}
+        </p>
+        {% endif %}
         <nav>
             {% block nav %}{% endblock %}
         </nav>

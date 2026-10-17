@@ -3,13 +3,13 @@
 {% block title %}Part Assignments | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
+    <a href={% url 'band:band_home' band.slug %}>Home</a>
     > Part Assignments
 {% endblock %}
 
 {% block content %}
     <h2>Part Assignments</h2>
-    <a href={% url 'band:part_assignment_create' %}>New Part Assignment</a>
+    <a href={% url 'band:part_assignment_create' band.slug %}>New Part Assignment</a>
     <table class="sortable">
         <thead>
             <tr>
@@ -28,7 +28,7 @@
                     <td sorttable_customkey={{ part_assignment.song_part.get_order }}>{{ part_assignment.song_part.name }}</td>
                     <td sorttable_customkey={{ part_assignment.instrument.order }}>{{ part_assignment.instrument }}</td>
                     <td>{{ part_assignment.member }}</td>
-                    <td><a href={% url 'band:part_assignment_update' part_assignment.pk %}>Edit</a></td>
+                    <td><a href={% url 'band:part_assignment_update' band.slug part_assignment.pk %}>Edit</a></td>
                 </tr>
             {% endfor %}
 

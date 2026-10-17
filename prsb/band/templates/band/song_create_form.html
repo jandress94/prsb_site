@@ -3,8 +3,8 @@
 {% block title %}New Song | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
-    > <a href={% url 'band:song_list' %}>Songs</a>
+    <a href={% url 'band:band_home' band.slug %}>Home</a>
+    > <a href={% url 'band:song_list' band.slug %}>Songs</a>
     > New Song
 {% endblock %}
 
