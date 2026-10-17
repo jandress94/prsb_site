@@ -1955,27 +1955,31 @@ class BandPageScopeTestCase(TestCase):
         BandSong.objects.create(band=cls.prsb, song=cls.song, in_gig_rotation=True)
 
     def test_other_band_hides_prsb_roster_and_song(self):
-        self.assertNotContains(
-            self.client.get(reverse("band:member_list", kwargs={"slug": "other"})),
-            "Scope User",
-        )
-        self.assertNotContains(
-            self.client.get(reverse("band:song_list", kwargs={"slug": "other"})),
-            "Scoped Song",
-        )
+        member_response = self.client.get(reverse("band:member_list", kwargs={"slug": "other"}))
+        self.assertEqual(list(member_response.context["object_list"]), [])
+        song_response = self.client.get(reverse("band:song_list", kwargs={"slug": "other"}))
+        self.assertEqual(list(song_response.context["object_list"]), [])
 
     def test_deactivate_hides_member_and_link_reactivates(self):
         membership = BandMembership.objects.get(band=self.prsb, member=self.user.bandmember)
         membership.is_active = False
         membership.save()
         listed = self.client.get(reverse("band:member_list", kwargs={"slug": "prsb"}))
-        self.assertNotContains(listed, "Scope User")
+        self.assertEqual(list(listed.context["object_list"]), [])
+        self.assertContains(listed, 'id="member-link-select"')
+        self.assertContains(listed, "Scope User")
         self.client.post(
             reverse("band:member_link", kwargs={"slug": "prsb"}),
             {"member": self.user.bandmember.pk},
         )
         membership.refresh_from_db()
         self.assertTrue(membership.is_active)
+
+    def test_song_active_on_other_band_appears_in_link_select(self):
+        response = self.client.get(reverse("band:song_list", kwargs={"slug": "other"}))
+        self.assertEqual(list(response.context["object_list"]), [])
+        self.assertContains(response, 'id="song-link-select"')
+        self.assertContains(response, "Scoped Song")
 
     def test_song_title_edit_is_global_and_rotation_is_local(self):
         BandSong.objects.create(band=self.other, song=self.song, in_gig_rotation=False)

@@ -89,17 +89,9 @@ class MemberListView(BandScopedMixin, generic.ListView):
         active_member_ids = BandMembership.objects.filter(
             band=self.band, is_active=True,
         ).values_list("member_id", flat=True)
-        member_ids_on_band = BandMembership.objects.filter(
-            band=self.band,
-        ).values_list("member_id", flat=True)
-        active_on_other_bands = BandMembership.objects.filter(
-            is_active=True,
-        ).exclude(band=self.band).values_list("member_id", flat=True)
         context["linkable_members"] = BandMember.objects.filter(
             user__is_active=True,
-        ).exclude(pk__in=active_member_ids).exclude(
-            pk__in=member_ids_on_band,
-        ).exclude(pk__in=active_on_other_bands).order_by(
+        ).exclude(pk__in=active_member_ids).order_by(
             'user__first_name', 'user__last_name',
         )
         return context
@@ -183,12 +175,9 @@ class SongListView(BandScopedMixin, generic.ListView):
         active_song_ids = BandSong.objects.filter(
             band=self.band, is_active=True,
         ).values_list("song_id", flat=True)
-        active_on_other_bands = BandSong.objects.filter(
-            is_active=True,
-        ).exclude(band=self.band).values_list("song_id", flat=True)
         context["linkable_songs"] = Song.objects.exclude(
             pk__in=active_song_ids,
-        ).exclude(pk__in=active_on_other_bands).order_by("title")
+        ).order_by("title")
         return context
 
 
