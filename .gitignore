@@ -127,3 +127,6 @@ coverage_html_report/
 .gradle/
 .scannerwork/
 .idea/
+
+# Local git worktrees
+.worktrees/
