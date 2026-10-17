@@ -36,8 +36,19 @@ class Song(models.Model):
     class Meta:
         ordering = ["title"]
 
+    def _band_for_absolute_url(self):
+        band_songs = self.band_songs.select_related("band").order_by("band__name")
+        active = band_songs.filter(is_active=True).first()
+        if active is not None:
+            return active.band
+        linked = band_songs.first()
+        return linked.band if linked is not None else None
+
     def get_absolute_url(self):
-        return reverse("band:song_detail", kwargs={"pk": self.pk})
+        band = self._band_for_absolute_url()
+        if band is None:
+            raise ValueError("Song has no band link; cannot build a band-scoped URL.")
+        return reverse("band:song_detail", kwargs={"slug": band.slug, "pk": self.pk})
 
     def __str__(self):
         return self.title

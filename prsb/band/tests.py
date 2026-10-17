@@ -1879,6 +1879,34 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
         self.assertEqual(special.band, band)
 
 
+class SongAbsoluteUrlTestCase(TestCase):
+    def test_get_absolute_url_uses_linked_band_slug(self):
+        song = Song.objects.create(title="Absolute URL Song")
+        band = Band.objects.create(name="Alpha Band", slug="alpha-band")
+        BandSong.objects.create(band=band, song=song, is_active=True)
+        url = song.get_absolute_url()
+        self.assertIn(f"/bands/{band.slug}/", url)
+        expected = reverse("band:song_detail", kwargs={"slug": band.slug, "pk": song.pk})
+        self.assertEqual(url, expected)
+
+    def test_get_absolute_url_prefers_active_band_ordered_by_name(self):
+        song = Song.objects.create(title="Multi Band Song")
+        zulu = Band.objects.create(name="Zulu Band", slug="zulu")
+        alpha = Band.objects.create(name="Alpha Band", slug="alpha")
+        BandSong.objects.create(band=zulu, song=song, is_active=False)
+        BandSong.objects.create(band=alpha, song=song, is_active=True)
+        url = song.get_absolute_url()
+        self.assertEqual(
+            url,
+            reverse("band:song_detail", kwargs={"slug": alpha.slug, "pk": song.pk}),
+        )
+
+    def test_get_absolute_url_without_band_link_raises(self):
+        song = Song.objects.create(title="Orphan Song")
+        with self.assertRaises(ValueError):
+            song.get_absolute_url()
+
+
 class BandRoutingTestCase(TestCase):
     def test_one_active_band_redirects_home(self):
         response = self.client.get(reverse("band:home"))
