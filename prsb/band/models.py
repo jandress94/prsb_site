@@ -10,6 +10,23 @@ from ordered_model.models import OrderedModel
 from tinymce import models as tinymce_models
 
 
+class Band(models.Model):
+    name = models.CharField(max_length=256)
+    slug = models.SlugField(max_length=256, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def delete(self, *args, **kwargs):
+        if self.gig_set.exists() or GigSetlistEntry.objects.filter(staffing_band=self).exists():
+            raise ValidationError("Deactivate this band instead of deleting it while gigs still use it.")
+        return super().delete(*args, **kwargs)
+
+
 class Song(models.Model):
     title = models.CharField(max_length=256)
     composer = models.CharField(max_length=256, blank=True)
@@ -25,6 +42,18 @@ class Song(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class BandSong(models.Model):
+    band = models.ForeignKey(Band, on_delete=models.CASCADE)
+    song = models.ForeignKey(Song, related_name="band_songs", on_delete=models.CASCADE)
+    in_gig_rotation = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["band", "song"], name="unique_band_song")
+        ]
 
 
 class SongPart(models.Model):
@@ -67,6 +96,17 @@ class BandMember(models.Model):
         return self.user.get_full_name()
 
 
+class BandMembership(models.Model):
+    band = models.ForeignKey(Band, on_delete=models.CASCADE)
+    member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["band", "member"], name="unique_band_membership")
+        ]
+
+
 @receiver(post_save, sender=User)
 def update_profile_signal(sender, instance, created, **kwargs):
     if created:
@@ -75,13 +115,17 @@ def update_profile_signal(sender, instance, created, **kwargs):
 
 
 class DrumKitCoverPlayer(models.Model):
-    member = models.OneToOneField(BandMember, on_delete=models.CASCADE)
+    band = models.ForeignKey(Band, on_delete=models.CASCADE)
+    member = models.ForeignKey(BandMember, on_delete=models.CASCADE)
     priority = models.PositiveSmallIntegerField(
         help_text="Lower number = preferred cover (e.g. 1 before 2).",
     )
 
     class Meta:
         ordering = ["priority", "member__user__first_name", "member__user__last_name"]
+        constraints = [
+            models.UniqueConstraint(fields=["band", "member"], name="unique_drum_kit_cover_player")
+        ]
 
     def __str__(self):
         return f"{self.member} (priority {self.priority})"
@@ -173,6 +217,8 @@ class Gig(models.Model):
         help_text="If checked, this gig is excluded from coverage-risk attendance stats.",
     )
 
+    bands = models.ManyToManyField("Band", related_name="gig_set", blank=True)
+
     def clean(self):
         super().clean()
         if self.end_datetime <= self.start_datetime:
@@ -190,6 +236,10 @@ class GigSetlistEntry(models.Model):
 
     song = models.ForeignKey(Song, on_delete=models.CASCADE, null=True, blank=True)
     break_duration = models.DurationField(null=True, blank=True)
+    staffing_mode = models.CharField(max_length=16, blank=True, default="")
+    staffing_band = models.ForeignKey(
+        "Band", null=True, blank=True, on_delete=models.PROTECT, related_name="staffed_entries",
+    )
 
     @property
     def is_break(self) -> bool:
@@ -281,6 +331,7 @@ class GigPartAssignmentOverride(models.Model):
 
 
 class BandSpecialDate(models.Model):
+    band = models.ForeignKey(Band, on_delete=models.CASCADE)
     date = YearlessDateField()
     description = models.TextField()
 

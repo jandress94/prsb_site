@@ -7,8 +7,9 @@ from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 
 
-from .models import Song, SongPart, BandMember, Instrument, PartAssignment, GigAttendance, Gig, GigInstrument, \
-    GigPartAssignmentOverride, GigSetlistEntry, BandSpecialDate, DrumKitCoverPlayer
+from .models import Song, SongPart, Band, BandMembership, BandSong, BandMember, Instrument, PartAssignment, \
+    GigAttendance, Gig, GigInstrument, GigPartAssignmentOverride, GigSetlistEntry, BandSpecialDate, \
+    DrumKitCoverPlayer
 
 
 class SongPartInline(admin.TabularInline):
@@ -19,6 +20,34 @@ class SongAdmin(admin.ModelAdmin):
     inlines = [SongPartInline]
     list_display = ["title", "in_gig_rotation"]
 admin.site.register(Song, SongAdmin)
+
+
+class BandAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "is_active"]
+
+    def delete_model(self, request, obj):
+        obj.delete()
+
+    def delete_queryset(self, request, queryset):
+        for obj in queryset:
+            obj.delete()
+
+
+admin.site.register(Band, BandAdmin)
+
+
+class BandMembershipAdmin(admin.ModelAdmin):
+    list_display = ["band", "member", "is_active"]
+
+
+admin.site.register(BandMembership, BandMembershipAdmin)
+
+
+class BandSongAdmin(admin.ModelAdmin):
+    list_display = ["band", "song", "in_gig_rotation", "is_active"]
+
+
+admin.site.register(BandSong, BandSongAdmin)
 
 
 @admin.display(description="Name", ordering=Concat("user__first_name", Value(" "), "user__last_name"))
@@ -48,7 +77,7 @@ admin.site.register(Instrument, InstrumentAdmin)
 
 
 class DrumKitCoverPlayerAdmin(admin.ModelAdmin):
-    list_display = ["member", "priority"]
+    list_display = ["band", "member", "priority"]
     list_filter = ["priority"]
     ordering = ["priority"]
 
@@ -185,4 +214,8 @@ class GigPartAssignmentOverrideAdmin(admin.ModelAdmin):
 admin.site.register(GigPartAssignmentOverride, GigPartAssignmentOverrideAdmin)
 
 
-admin.site.register(BandSpecialDate)
+class BandSpecialDateAdmin(admin.ModelAdmin):
+    list_display = ["band", "date", "description"]
+
+
+admin.site.register(BandSpecialDate, BandSpecialDateAdmin)

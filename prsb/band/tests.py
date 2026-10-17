@@ -8,9 +8,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from band.models import (
-    BandMember, DrumKitCoverPlayer, Gig, GigAttendance, GigInstrument, GigPartAssignmentOverride,
-    GigSetlistEntry, Instrument, OverrideType, PartAssignment, PerformanceReadiness,
-    Song, SongPart,
+    Band, BandMembership, BandMember, BandSong, DrumKitCoverPlayer, Gig, GigAttendance,
+    GigInstrument, GigPartAssignmentOverride, GigSetlistEntry, Instrument, OverrideType,
+    PartAssignment, PerformanceReadiness, Song, SongPart,
 )
 from types import SimpleNamespace
 
@@ -1121,6 +1121,7 @@ class PartAssignmentCanSoloFormTestCase(TestCase):
 class DrumKitCoverModelTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.band = Band.objects.create(name="Kit Cover Band", slug="kit-cover-band")
         cls.user = User.objects.create_user(
             username="kit_cover_model_user", first_name="Kit", last_name="Cover",
         )
@@ -1131,10 +1132,10 @@ class DrumKitCoverModelTestCase(TestCase):
 
     def test_drum_kit_cover_player_unique_member_and_str(self):
         row = DrumKitCoverPlayer.objects.create(
-            member=self.user.bandmember, priority=1,
+            band=self.band, member=self.user.bandmember, priority=1,
         )
         self.assertEqual(str(row), "Kit Cover (priority 1)")
-        dup = DrumKitCoverPlayer(member=self.user.bandmember, priority=2)
+        dup = DrumKitCoverPlayer(band=self.band, member=self.user.bandmember, priority=2)
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 dup.save()
@@ -1143,6 +1144,7 @@ class DrumKitCoverModelTestCase(TestCase):
 class DrumKitCoverInjectionTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.band = Band.objects.create(name="Kit Inject Band", slug="kit-inject-band")
         cls.song = Song.objects.create(title="Kit Inject Song", in_gig_rotation=True)
         cls.engine = SongPart.objects.create(song=cls.song, name="Engine Room")
         cls.lead = SongPart.objects.create(song=cls.song, name="Lead")
@@ -1165,10 +1167,10 @@ class DrumKitCoverInjectionTestCase(TestCase):
             performance_readiness=PerformanceReadiness.READY,
         )
 
-        DrumKitCoverPlayer.objects.create(member=cls.jansen.bandmember, priority=1)
-        DrumKitCoverPlayer.objects.create(member=cls.ben.bandmember, priority=2)
-        DrumKitCoverPlayer.objects.create(member=cls.carlos.bandmember, priority=2)
-        DrumKitCoverPlayer.objects.create(member=cls.dario.bandmember, priority=2)
+        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.jansen.bandmember, priority=1)
+        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.ben.bandmember, priority=2)
+        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.carlos.bandmember, priority=2)
+        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.dario.bandmember, priority=2)
 
         cls.kit_repertoire = list(
             PartAssignment.objects.filter(song_part__song=cls.song, instrument=cls.kit)
@@ -1279,6 +1281,7 @@ class DrumKitCoverInjectionTestCase(TestCase):
 class DrumKitCoverGigAssignmentTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.band = Band.objects.create(name="Kit Gig Band", slug="kit-gig-band")
         cls.song = Song.objects.create(title="Kit Gig Song", in_gig_rotation=True)
         cls.engine = SongPart.objects.create(song=cls.song, name="Engine Room")
         cls.lead_part = SongPart.objects.create(song=cls.song, name="Lead")
@@ -1307,8 +1310,8 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
             performance_readiness=PerformanceReadiness.READY,
         )
 
-        DrumKitCoverPlayer.objects.create(member=cls.jansen.bandmember, priority=1)
-        DrumKitCoverPlayer.objects.create(member=cls.carlos.bandmember, priority=2)
+        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.jansen.bandmember, priority=1)
+        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.carlos.bandmember, priority=2)
 
         cls.gig = Gig.objects.create(
             name="Kit Gig",
@@ -1662,4 +1665,31 @@ class DietaryRestrictionsViewTestCase(TestCase):
         self.assertEqual(resp.context["status_labels"], ["Maybe available", "No status yet"])
         self.assertContains(resp, "Harvest Festival")
         self.assertContains(resp, "Maybe available, No status yet")
+
+
+class BandModelTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="band_model_user", first_name="Ada", last_name="Brass")
+        cls.song = Song.objects.create(title="Band Model Song")
+        cls.gig = Gig.objects.create(
+            name="Band Model Gig",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+
+    def test_membership_and_song_links_are_unique(self):
+        band = Band.objects.create(name="River City", slug="river-city")
+        BandMembership.objects.create(band=band, member=self.user.bandmember)
+        BandSong.objects.create(band=band, song=self.song, in_gig_rotation=True)
+        with self.assertRaises(Exception):
+            BandMembership.objects.create(band=band, member=self.user.bandmember)
+        with self.assertRaises(Exception):
+            BandSong.objects.create(band=band, song=self.song)
+
+    def test_band_delete_refused_while_named_by_gig(self):
+        band = Band.objects.create(name="Host", slug="host")
+        self.gig.bands.add(band)
+        with self.assertRaises(ValidationError):
+            band.delete()
 
