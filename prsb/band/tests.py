@@ -22,6 +22,7 @@ from scripts.gig_part_assignment import (
     inject_drum_kit_cover_assignments,
 )
 from scripts.coverage_risk import get_coverage_risk, DEFAULT_LOOKBACK
+from band.validation import validate_entry_change, validate_gig_bands
 from band.views import GigPartAssignmentOverrideForm
 PRSB_SLUG = "prsb"
 
@@ -512,6 +513,11 @@ class GigPartAssignmentOverrideTestCase(TestCase):
 
         cls.member_a = User.objects.create_user(username="alice", first_name="Alice", last_name="Smith")
         cls.member_b = User.objects.create_user(username="bob", first_name="Bob", last_name="Jones")
+        prsb = Band.objects.get(slug="prsb")
+        for user in (cls.member_a, cls.member_b):
+            BandMembership.objects.get_or_create(
+                band=prsb, member=user.bandmember, defaults={"is_active": True},
+            )
 
         cls.gig = Gig.objects.create(
             name="Test Gig",
@@ -2003,6 +2009,123 @@ class BandPageScopeTestCase(TestCase):
         for url_name, data in cases:
             response = self.client.post(reverse(url_name, kwargs={"slug": inactive.slug}), data)
             self.assertEqual(response.status_code, 403, msg=url_name)
+
+
+class GigStaffingValidationTestCase(TestCase):
+    _band_counter = 0
+
+    def make_two_band_gig(self):
+        GigStaffingValidationTestCase._band_counter += 1
+        n = GigStaffingValidationTestCase._band_counter
+        first = Band.objects.create(name=f"Gig Staff A {n}", slug=f"gig-staff-a-{n}")
+        second = Band.objects.create(name=f"Gig Staff B {n}", slug=f"gig-staff-b-{n}")
+        gig = Gig.objects.create(
+            name=f"Two-band gig {n}",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        gig.bands.set([first, second])
+        return gig
+
+    def link_song(self, band, title):
+        song = Song.objects.create(title=title)
+        BandSong.objects.create(band=band, song=song, is_active=True, in_gig_rotation=True)
+        return song
+
+    def test_multi_band_entries_can_name_different_bands(self):
+        gig = self.make_two_band_gig()
+        first, second = gig.bands.order_by("name")
+        song_a = self.link_song(first, "Song A")
+        song_b = self.link_song(second, "Song B")
+        GigSetlistEntry.objects.create(gig=gig, song=song_a, staffing_mode="only", staffing_band=first, _order=0)
+        GigSetlistEntry.objects.create(gig=gig, song=song_b, staffing_mode="only", staffing_band=second, _order=1)
+        self.assertEqual(gig.gigsetlistentry_set.count(), 2)
+
+    def test_removing_named_band_fails(self):
+        gig = self.make_two_band_gig()
+        first, second = list(gig.bands.all())
+        song = self.link_song(first, "Kept")
+        entry = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=first,
+        )
+        with self.assertRaises(ValidationError):
+            validate_gig_bands(gig, [second], [entry])
+
+    def test_deactivating_song_link_leaves_old_entry_valid(self):
+        gig = self.make_two_band_gig()
+        first = gig.bands.order_by("name").first()
+        song = self.link_song(first, "Old")
+        entry = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=first,
+        )
+        BandSong.objects.filter(band=first, song=song).update(is_active=False)
+        validate_entry_change(entry, previous=entry, gig_bands=set(gig.bands.all()))
+
+    def test_new_only_entry_requires_active_repertoire(self):
+        gig = self.make_two_band_gig()
+        first, second = list(gig.bands.order_by("name"))
+        song = Song.objects.create(title="Unlinked")
+        entry = GigSetlistEntry(gig=gig, song=song, staffing_mode="only", staffing_band=first)
+        with self.assertRaises(ValidationError):
+            validate_entry_change(entry, previous=None, gig_bands=set(gig.bands.all()))
+
+    def _gig_update_post_data(self, gig, band_ids):
+        return {
+            "name": gig.name,
+            "start_datetime": gig.start_datetime.strftime("%Y-%m-%dT%H:%M"),
+            "end_datetime": gig.end_datetime.strftime("%Y-%m-%dT%H:%M"),
+            "address": "",
+            "notes": "",
+            "is_small_group": "",
+            "bands": [str(pk) for pk in band_ids],
+            "giginstrument_set-TOTAL_FORMS": "0",
+            "giginstrument_set-INITIAL_FORMS": "0",
+            "giginstrument_set-MIN_NUM_FORMS": "0",
+            "giginstrument_set-MAX_NUM_FORMS": "1000",
+        }
+
+    def test_one_band_gig_update_clears_staffing_fields(self):
+        gig = self.make_two_band_gig()
+        first, second = list(gig.bands.order_by("name"))
+        song = self.link_song(first, "Staffed")
+        entry = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=first,
+        )
+        url = reverse("band:gig_update", kwargs={"slug": first.slug, "pk": gig.pk})
+        response = self.client.post(url, self._gig_update_post_data(gig, [first.pk]))
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.staffing_mode, "")
+        self.assertIsNone(entry.staffing_band_id)
+
+    def test_override_rejects_member_outside_entry_pool(self):
+        gig = self.make_two_band_gig()
+        first, second = list(gig.bands.order_by("name"))
+        song = self.link_song(first, "Pool Song")
+        GigSetlistEntry.objects.create(gig=gig, song=song, staffing_mode="only", staffing_band=first)
+        part = SongPart.objects.create(song=song, name="Part")
+        drums = Instrument.objects.create(name=f"Pool drums {gig.pk}", order=0)
+        gig_drums = GigInstrument.objects.create(gig=gig, instrument=drums, gig_quantity=1)
+
+        in_pool = User.objects.create_user(username=f"pool_in_{gig.pk}", first_name="In", last_name="Pool")
+        out_pool = User.objects.create_user(username=f"pool_out_{gig.pk}", first_name="Out", last_name="Pool")
+        BandMembership.objects.create(band=first, member=in_pool.bandmember, is_active=True)
+        BandMembership.objects.create(band=second, member=out_pool.bandmember, is_active=True)
+        for member in (in_pool.bandmember, out_pool.bandmember):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+
+        form = GigPartAssignmentOverrideForm(
+            data={
+                "override_type": OverrideType.NOT_PLAYING,
+                "member": out_pool.bandmember.pk,
+                "song_part": part.pk,
+                "gig_instrument": gig_drums.pk,
+            },
+            gig_id=gig.pk,
+            gig_name=gig.name,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("member", form.errors)
 
 
 class BandSongRotationTestCase(TestCase):

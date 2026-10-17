@@ -4,7 +4,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Exists, OuterRef, Subquery
+from django.core.exceptions import ValidationError
+from django.db.models import Exists, OuterRef, Q, Subquery
 from django import forms
 from django.db import connection
 from django.forms import modelformset_factory, formset_factory, inlineformset_factory
@@ -30,6 +31,7 @@ from .linking import link_member, link_song
 from .models import Band, BandMembership, BandSong, Song, Gig, GigAttendance, BandMember, PartAssignment, \
     Instrument, SongPart, GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
 from .scoping import active_bands, get_band, get_gig_for_band
+from .validation import entry_pool_member_ids, validate_entry_change, validate_gig_bands
 
 
 def home(request):
@@ -558,9 +560,12 @@ class GigListView(BandScopedMixin, generic.ListView):
 
 
 class GigForm(forms.ModelForm):
+    bands = forms.ModelMultipleChoiceField(queryset=Band.objects.none())
+
     class Meta:
         model = Gig
         fields = ['name',
+                  'bands',
                   'start_datetime',
                   'end_datetime',
                   'address',
@@ -575,6 +580,27 @@ class GigForm(forms.ModelForm):
         widget=forms.DateTimeInput(attrs={'type': 'datetime-local'})
     )
     notes = HTMLField()
+
+    def __init__(self, *args, band=None, **kwargs):
+        self.band = band
+        super().__init__(*args, **kwargs)
+        current_ids = []
+        if self.instance.pk:
+            current_ids = list(self.instance.bands.values_list("pk", flat=True))
+        elif band is not None:
+            current_ids = [band.pk]
+            self.fields["bands"].initial = [band.pk]
+        self.fields["bands"].queryset = Band.objects.filter(
+            Q(is_active=True) | Q(pk__in=current_ids),
+        ).distinct()
+
+    def clean_bands(self):
+        bands = self.cleaned_data["bands"]
+        entries = []
+        if self.instance.pk:
+            entries = list(GigSetlistEntry.objects.filter(gig=self.instance))
+        validate_gig_bands(self.instance, bands, entries)
+        return bands
 
 
 class GigInstrumentForm(forms.ModelForm):
@@ -600,6 +626,11 @@ class GigCreateView(BandScopedMixin, generic.CreateView):
     form_class = GigForm
     template_name_suffix = '_update_form'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["band"] = self.band
+        return kwargs
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_create'] = True
@@ -615,16 +646,40 @@ class GigCreateView(BandScopedMixin, generic.CreateView):
         instrument_formset = context['instrument_formset']
 
         if form.is_valid() and instrument_formset.is_valid():
-            self.object = form.save()  # Save the Gig instance
-            self.object.bands.add(self.band)
+            self.object = form.save()
             instrument_formset.instance = self.object  # Link the formset to this Gig
             instrument_formset.save()  # Save the related GigInstrument instances
+            if form.cleaned_data["bands"].count() == 1:
+                GigSetlistEntry.objects.filter(gig=self.object, song__isnull=False).update(
+                    staffing_mode="",
+                    staffing_band=None,
+                )
             return redirect(self.get_success_url())
 
         return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse("band:gig_detail", kwargs={"slug": self.band.slug, "pk": self.object.pk})
+
+
+def _gig_attendance_eligible_member_ids(gig):
+    return set(
+        BandMembership.objects.filter(
+            band__in=gig.bands.all(),
+            is_active=True,
+            member__user__is_active=True,
+        ).values_list("member_id", flat=True)
+    )
+
+
+def _gig_missing_attendance_members(gig):
+    return BandMember.objects.filter(
+        bandmembership__band__in=gig.bands.all(),
+        bandmembership__is_active=True,
+        user__is_active=True,
+    ).exclude(
+        pk__in=GigAttendance.objects.filter(gig=gig).values_list("member_id", flat=True),
+    ).distinct().order_by("user__first_name", "user__last_name")
 
 
 class GigDetailView(BandScopedMixin, GigBandObjectMixin, generic.DetailView):
@@ -655,10 +710,7 @@ class GigDetailView(BandScopedMixin, GigBandObjectMixin, generic.DetailView):
             members = gig.gigattendance_set.filter(status=availability)
             context[f"{availability}_members"] = sorted(members, key=lambda ga: ga.member.user.get_full_name())
 
-        context["missing_members"] = BandMember.objects.filter(
-            ~Exists(GigAttendance.objects.filter(member=OuterRef("pk"), gig=gig)),
-            user__is_active=True
-        ).order_by('user__first_name', 'user__last_name')
+        context["missing_members"] = _gig_missing_attendance_members(gig)
 
         return context
 
@@ -667,6 +719,11 @@ class GigUpdateView(BandScopedMixin, GigBandObjectMixin, generic.UpdateView):
     model = Gig
     form_class = GigForm
     template_name_suffix = '_update_form'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["band"] = self.band
+        return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -687,6 +744,11 @@ class GigUpdateView(BandScopedMixin, GigBandObjectMixin, generic.UpdateView):
             instrument_formset.instance = self.object  # Link the formset to this Gig
             GigInstrument.objects.filter(gig=self.object).exclude(id__in={form.instance.id for form in instrument_formset.forms}).delete()
             instrument_formset.save()  # Save the related GigInstrument instances
+            if form.cleaned_data["bands"].count() == 1:
+                GigSetlistEntry.objects.filter(gig=self.object, song__isnull=False).update(
+                    staffing_mode="",
+                    staffing_band=None,
+                )
             return redirect(self.get_success_url())
 
         return self.form_invalid(form)
@@ -701,8 +763,8 @@ class GigAvailabilityForm(forms.Form):
     status = forms.ChoiceField(choices=[(None, '------')] + list(GigAttendance.AVAILABILITY_CHOICES.items()), required=False)
 
     def __init__(self, *args, **kwargs):
+        self.eligible_member_ids = kwargs.pop("eligible_member_ids", None)
         super().__init__(*args, **kwargs)
-        print(args, kwargs)
 
         if 'initial' not in kwargs:
             return
@@ -711,6 +773,14 @@ class GigAvailabilityForm(forms.Form):
 
         self.fields['member_id'].initial = member.user_id
         self.member_name = member.user.get_full_name()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("attendance_id") is None and cleaned_data.get("status"):
+            member_id = cleaned_data.get("member_id")
+            if self.eligible_member_ids is not None and member_id not in self.eligible_member_ids:
+                raise ValidationError("That member is not on an active gig band roster.")
+        return cleaned_data
 
 GigAvailabilityFormSet = formset_factory(GigAvailabilityForm, extra=0)
 
@@ -731,7 +801,7 @@ class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
             for ga in existing_gig_attendance
         ]
 
-        missing_members = BandMember.objects.filter(~Exists(GigAttendance.objects.filter(gig=gig, member=OuterRef('pk'))), user__is_active=True)
+        missing_members = _gig_missing_attendance_members(gig)
         initial_data += [
             {
                 'attendance_id': None,
@@ -743,12 +813,20 @@ class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
 
         initial_data = sorted(initial_data, key=lambda x: x['member'].user.get_full_name())
 
-        formset = GigAvailabilityFormSet(initial=initial_data)
+        eligible_member_ids = _gig_attendance_eligible_member_ids(gig)
+        formset = GigAvailabilityFormSet(
+            initial=initial_data,
+            form_kwargs={"eligible_member_ids": eligible_member_ids},
+        )
         return render(request, self.template_name, self.band_context(gig=gig, formset=formset))
 
     def post(self, request, gig_id, slug):
         gig = get_gig_for_band(gig_id, self.band)
-        formset = GigAvailabilityFormSet(request.POST)
+        eligible_member_ids = _gig_attendance_eligible_member_ids(gig)
+        formset = GigAvailabilityFormSet(
+            request.POST,
+            form_kwargs={"eligible_member_ids": eligible_member_ids},
+        )
 
         if formset.is_valid():
             new_gig_attendance = []
@@ -773,17 +851,50 @@ class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
 
 
 class GigSetlistEntryForm(forms.ModelForm):
+    staffing_mode = forms.ChoiceField(
+        choices=[
+            ("", "---------"),
+            ("only", "Only this band"),
+            ("prefer", "Prefer this band"),
+            ("any", "Any band on the gig"),
+        ],
+        required=False,
+    )
+
     class Meta:
         model = GigSetlistEntry
-        fields = ['song', 'break_duration']
+        fields = ['song', 'break_duration', 'staffing_mode', 'staffing_band']
 
     def __init__(self, *args, gig=None, **kwargs):
+        self.gig = gig
         super().__init__(*args, **kwargs)
         if gig is not None:
             self.fields["song"].queryset = Song.objects.filter(
                 band_songs__band__in=gig.bands.all(),
                 band_songs__is_active=True,
             ).distinct()
+            self.fields["staffing_band"].queryset = gig.bands.all()
+            self.show_staffing_fields = gig.bands.count() >= 2
+        else:
+            self.show_staffing_fields = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.gig is None:
+            return cleaned_data
+        if self.gig.bands.count() < 2:
+            cleaned_data["staffing_mode"] = ""
+            cleaned_data["staffing_band"] = None
+            return cleaned_data
+        previous = self.instance if self.instance.pk else None
+        entry = GigSetlistEntry(
+            gig=self.gig,
+            song=cleaned_data.get("song"),
+            staffing_mode=cleaned_data.get("staffing_mode") or "",
+            staffing_band=cleaned_data.get("staffing_band"),
+        )
+        validate_entry_change(entry, previous=previous, gig_bands=set(self.gig.bands.all()))
+        return cleaned_data
 
 
 def gig_setlist_entry_formset(gig):
@@ -806,7 +917,11 @@ class GigSetlistUpdateView(BandScopedMixin, generic.View):
     def get(self, request, gig_id, slug):
         gig = get_gig_for_band(gig_id, self.band)
         formset = gig_setlist_entry_formset(gig)(queryset=GigSetlistEntry.objects.filter(gig=gig))
-        return render(request, self.template_name, self.band_context(formset=formset, gig=gig))
+        return render(
+            request,
+            self.template_name,
+            self.band_context(formset=formset, gig=gig, show_staffing_fields=gig.bands.count() >= 2),
+        )
 
     def post(self, request, gig_id, slug):
         gig = get_gig_for_band(gig_id, self.band)
@@ -824,11 +939,22 @@ class GigSetlistUpdateView(BandScopedMixin, generic.View):
             for i, form in enumerate(formset.forms):
                 form.instance.gig = gig  # Ensure each entry is linked to the correct gig
                 form.instance._order = i
+                if gig.bands.count() < 2:
+                    form.instance.staffing_mode = ""
+                    form.instance.staffing_band = None
                 form.instance.save()
 
             return redirect("band:gig_detail", slug=self.band.slug, pk=gig.id)
 
-        return render(request, self.template_name, self.band_context(formset=formset, gig=gig))
+        return render(
+            request,
+            self.template_name,
+            self.band_context(
+                formset=formset,
+                gig=gig,
+                show_staffing_fields=gig.bands.count() >= 2,
+            ),
+        )
 
 
 class GigSetlistAddSongView(BandScopedMixin, generic.View):
@@ -895,8 +1021,9 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
                                                                                                        gig_id=self.gig_id,
                                                                                                        status=GigAttendance.AVAILABLE)),
                                                                    user__is_active=True)
+        gig_band_ids = Gig.objects.filter(pk=self.gig_id).values_list("bands", flat=True)
         self.fields['song_part'].queryset = SongPart.objects.filter(
-            song__band_songs__band__slug="prsb",
+            song__band_songs__band__in=gig_band_ids,
             song__band_songs__in_gig_rotation=True,
             song__band_songs__is_active=True,
         ).distinct().order_by('song', '_order')
@@ -910,6 +1037,14 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
             cleaned_data['performance_readiness'] = PerformanceReadiness.READY
         elif override_type == OverrideType.ASSIGN and not cleaned_data.get('performance_readiness'):
             self.add_error('performance_readiness', 'This field is required.')
+        member = cleaned_data.get("member")
+        song_part = cleaned_data.get("song_part")
+        if member and song_part:
+            entry = GigSetlistEntry.objects.filter(gig_id=self.gig_id, song_id=song_part.song_id).first()
+            if entry is not None:
+                pool = entry_pool_member_ids(entry)
+                if member.pk not in pool:
+                    self.add_error("member", "That member is outside the staffing pool for this song.")
         return cleaned_data
 
 
