@@ -118,7 +118,15 @@ Django admin can edit bands, memberships, and song links. The birthday script gr
 
 ## Solver
 
-`get_gig_part_assignments` solves each setlist entry on its own, in setlist order, so two copies of a song can use different bands. Workload counts accumulate in that order. Results are one row per setlist entry, not one row per distinct song.
+`get_gig_part_assignments` solves each setlist entry on its own, so two copies of a song can use different bands. Results are one row per setlist entry, not one row per distinct song.
+
+Solve order preserves the current strategy of handling songs with fewer possible `PartAssignment` rows first:
+
+1. Entries with a single-band pool: every entry on a one-band gig, then **Only** entries on a multi-band gig
+2. **Prefer** and **Any band on the gig** entries
+3. Recommendations
+
+Within each group, sort by the number of eligible candidate `PartAssignment` rows, ascending, then song title, then setlist-entry order as a stable tie-breaker. Candidate count uses that entry's allowed pool. Workload counts accumulate in solve order. This lets constrained single-band entries claim scarce players before entries that can draw from multiple bands.
 
 Eligible people are attendees with `GigAttendance.AVAILABLE` who have a membership in at least one band on the gig. `maybe_available` stays unused.
 
@@ -167,6 +175,7 @@ One migration creates an active band named PRSB with slug `prsb`. It links every
 - **Only** never assigns another band.
 - **Prefer** assigns a non-preferred player rather than leave a hole, and keeps the preferred player when both can cover. A person in both bands counts as preferred.
 - **Any band on the gig** may use either roster.
+- Single-band-pool entries solve before **Prefer** and **Any** entries. Within each group, entries with fewer eligible candidate rows solve first.
 - A new override outside that entry's pool is rejected.
 - Coverage risk and dietary restrictions use the current band's active roster. Coverage risk also uses that band's active in-rotation songs and gigs that include the band.
 
