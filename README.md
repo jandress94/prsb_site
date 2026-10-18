@@ -35,9 +35,9 @@ Items marked `[agent]` were added from prior conversation themes and a project s
 - Indication of missing soloist on a song that requires it
 - UI to add and edit song parts directly from the song creation or edit form
 - Authentication and RBAC
+- Band-scoped roles: membership restricts which bands a user can see and what they can edit (until then, any logged-in user can switch to any band)
 - addition of .../me (or something like that) to allow authenticated users direct access to their own profile and song parts
 - Member "About Me"
-- Multiple bands
 - Caching / saving gig part assignments for better latency
 - Something better for the part-assignments page. Loading everything is too massive and isn't useful.
 - Other reports (t-shirts, birthdays, etc)

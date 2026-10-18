@@ -3,15 +3,12 @@
 {% block title %}{{ partassignment }} | Update | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
     {% if form.member_name %}
-        > <a href={% url 'band:member_list' %}>Band Members</a>
-        > <a href={% url 'band:member_detail' form.member_id %}>{{ form.member_name }}</a>
+        > <a href={% url 'band:member_list' band.slug %}>Band Members</a>
+        > <a href={% url 'band:member_detail' band.slug form.member_id %}>{{ form.member_name }}</a>
     {% elif form.song_name %}
-        > <a href={% url 'band:song_list' %}>Songs</a>
-        > <a href={% url 'band:song_detail' form.song_id %}>{{ form.song_name }}</a>
-    {% else %}
-        > <a href={% url 'band:part_assignment_list' %}>Part Assignments</a>
+        > <a href={% url 'band:song_list' band.slug %}>Songs</a>
+        > <a href={% url 'band:song_detail' band.slug form.song_id %}>{{ form.song_name }}</a>
     {% endif %}
     > Update Part Assignment
 {% endblock %}

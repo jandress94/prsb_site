@@ -1,6 +1,5 @@
 import itertools
 from datetime import datetime
-from itertools import groupby
 from typing import Tuple
 
 import django
@@ -13,7 +12,8 @@ from collections import Counter
 django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
     PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType, Instrument, \
-    DrumKitCoverPlayer
+    DrumKitCoverPlayer, BandMembership, BandSong
+from band.validation import entry_pool_member_ids
 
 
 RAND_SEED = 0
@@ -52,8 +52,9 @@ def get_score(num_missing_parts: int, instrument_fit: float) -> float:
 
 class GigPartAssignment:
     def __init__(self, song: Song, part_assignments: list[PartAssignment], score: float,
-                 attendees: list[BandMember], gig_instruments: list[GigInstrument]):
+                 attendees: list[BandMember], gig_instruments: list[GigInstrument], setlist_entry=None):
         self.song = song
+        self.setlist_entry = setlist_entry
         self.score = score
         self.part_assignments = part_assignments
 
@@ -154,12 +155,15 @@ def inject_drum_kit_cover_assignments(
 
 def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: list[PartAssignment],
                                   gig_instruments: list[GigInstrument], member_song_counts: Counter,
-                                  part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[PartAssignment] | None, float]:
+                                  part_assignment_overrides: list[GigPartAssignmentOverride],
+                                  preferred_member_ids: set[int] | None = None) -> Tuple[list[PartAssignment] | None, float]:
     assign_overrides, not_playing = _partition_overrides(part_assignment_overrides)
     all_assignments = [
         assignment for assignment in all_assignments
         if (assignment.member_id, assignment.song_part_id, assignment.instrument_id) not in not_playing
     ]
+    if not all_assignments and not assign_overrides:
+        return [], get_score(len(part_list), 0.0)
     members = {}
     instruments = {}
     parts = {}
@@ -297,10 +301,25 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
             c_soloist[i] = -soloist_reward
     # Override variables (indices num_assignments .. num_assignments+num_overrides-1) stay 0.
 
+    # Several solo rewards can stack on one lineup. One non-preferred assignment has
+    # to cost more than all of them plus the full instrument reward. A hole still
+    # costs more than marking every candidate non-preferred. Keep this penalty off
+    # c_instrument so instrument_fit is scored from the instrument coefficients alone.
+    non_preferred_penalty = max_concurrent_players * soloist_reward + max_instrument_reward + 1
+    c_preference = np.zeros(num_vars)
+    if preferred_member_ids is not None:
+        missing_part_penalty = max(
+            missing_part_penalty,
+            num_assignments * non_preferred_penalty + 1,
+        )
+        for index, assignment in enumerate(all_assignments):
+            if assignment.member_id not in preferred_member_ids:
+                c_preference[index] = non_preferred_penalty
+
     c_missing_part_penalty = np.zeros(num_vars)
     c_missing_part_penalty[num_assignments + num_overrides:] = missing_part_penalty
 
-    c = c_instrument + c_random + c_per_song_penalty + c_soloist + c_missing_part_penalty
+    c = c_instrument + c_random + c_per_song_penalty + c_soloist + c_preference + c_missing_part_penalty
 
     ##########################################################################################
     # Other Settings
@@ -341,29 +360,94 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
     return gig_part_assignments, get_score(num_missing_parts, instrument_fit)
 
 
+def pool_rank(entry):
+    if entry is None:
+        return 3
+    if entry.gig.bands.count() < 2 or entry.staffing_mode in {"", "only"}:
+        return 0 if entry.gig.bands.count() < 2 else 1
+    return 2
+
+
+def _preferred_member_ids(entry):
+    if entry is None or entry.staffing_mode != "prefer":
+        return None
+    return set(
+        BandMembership.objects.filter(band_id=entry.staffing_band_id).values_list("member_id", flat=True)
+    )
+
+
+def _cover_players_for(entry, gig_bands, cover_rows):
+    """Only and one-band gigs use one band's cover list. Prefer, Any, and recommendations use every gig band."""
+    if entry is not None and (len(gig_bands) < 2 or entry.staffing_mode in {"", "only"}):
+        if len(gig_bands) < 2 or not entry.staffing_band_id:
+            band_ids = {band.pk for band in gig_bands}
+        else:
+            band_ids = {entry.staffing_band_id}
+    else:
+        band_ids = {band.pk for band in gig_bands}
+    chosen = {}
+    for cover in cover_rows:
+        if cover.band_id not in band_ids:
+            continue
+        current = chosen.get(cover.member_id)
+        rank = (cover.priority, cover.band.name)
+        if current is None or rank < (current.priority, current.band.name):
+            chosen[cover.member_id] = cover
+    return list(chosen.values())
+
+
 def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAssignmentOverride]) -> Tuple[list[GigPartAssignment], list[GigPartAssignment], Counter]:
     np.random.seed(RAND_SEED)
-    attendees = BandMember.objects.filter(gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE)
+    attendees = list(
+        BandMember.objects.filter(
+            gigattendance__gig=gig, gigattendance__status=GigAttendance.AVAILABLE,
+        ).select_related("user")
+    )
+    available_by_id = {member.pk: member for member in attendees}
     gig_instruments: list[GigInstrument] = list(GigInstrument.objects.filter(gig=gig))
+    gig_bands = list(gig.bands.all())
 
     gig_part_assignments_setlist = []
     gig_part_assignments_recs = []
-
     member_song_counts = Counter()
 
-    all_part_assignments = PartAssignment.objects.filter(~Exists(GigPartAssignmentOverride.objects.filter(gig_instrument__gig=gig,
-                                                                                                          song_part__song=OuterRef("song_part__song"),
-                                                                                                          member=OuterRef("member"),
-                                                                                                          override_type=OverrideType.ASSIGN)),
-                                                         member__gigattendance__gig=gig,
-                                                         member__gigattendance__status=GigAttendance.AVAILABLE,
-                                                         instrument__giginstrument__in=gig_instruments,
-                                                         song_part__song__in_gig_rotation=True) \
-        .exclude(performance_readiness=PerformanceReadiness.NOT_READY) \
-        .order_by("song_part__song")
+    entries = list(
+        GigSetlistEntry.objects.filter(gig=gig, song__isnull=False)
+        .select_related("song", "staffing_band", "gig")
+        .prefetch_related("song__parts")
+        .order_by("_order")
+    )
+    setlist_song_ids = {entry.song_id for entry in entries}
+    rec_song_ids = set(
+        BandSong.objects.filter(
+            band__in=gig_bands,
+            is_active=True,
+            in_gig_rotation=True,
+        ).exclude(song_id__in=setlist_song_ids).values_list("song_id", flat=True)
+    )
+    relevant_song_ids = setlist_song_ids | rec_song_ids
 
-    song_to_part_assignments = {s: list(p) for s, p in groupby(all_part_assignments, lambda pa: pa.song_part.song)}
-    song_to_overrides = {s: list(o) for s, o in groupby(part_assignment_overrides, lambda pao: pao.song_part.song)}
+    part_rows_by_song = {}
+    if relevant_song_ids and gig_instruments:
+        part_rows = PartAssignment.objects.filter(
+            ~Exists(GigPartAssignmentOverride.objects.filter(
+                gig_instrument__gig=gig,
+                song_part__song=OuterRef("song_part__song"),
+                member=OuterRef("member"),
+                override_type=OverrideType.ASSIGN,
+            )),
+            member_id__in=available_by_id,
+            instrument__giginstrument__in=gig_instruments,
+            song_part__song_id__in=relevant_song_ids,
+        ).exclude(
+            performance_readiness=PerformanceReadiness.NOT_READY,
+        ).select_related("member__user", "song_part", "instrument")
+        for row in part_rows:
+            part_rows_by_song.setdefault(row.song_part.song_id, []).append(row)
+
+    overrides_by_song = {}
+    for override in part_assignment_overrides:
+        overrides_by_song.setdefault(override.song_part.song_id, []).append(override)
 
     kit_instrument = (
         Instrument.objects.filter(is_drum_kit_cover_instrument=True).order_by("order").first()
@@ -371,60 +455,102 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
     gig_has_kit = kit_instrument is not None and any(
         gi.instrument_id == kit_instrument.id for gi in gig_instruments
     )
-    cover_players = list(DrumKitCoverPlayer.objects.select_related("member__user")) if gig_has_kit else []
-    available_member_set = set(attendees)
-
-    # Prefetch kit repertoire for rotation songs (no attendance filter)
+    cover_rows = list(
+        DrumKitCoverPlayer.objects.filter(band__in=gig_bands).select_related("member__user", "band")
+    ) if gig_has_kit else []
     kit_repertoire_by_song = {}
-    if gig_has_kit:
+    if gig_has_kit and relevant_song_ids:
         kit_pas = PartAssignment.objects.filter(
             instrument=kit_instrument,
-            song_part__song__in_gig_rotation=True,
+            song_part__song_id__in=relevant_song_ids,
         ).select_related("member", "song_part", "instrument").order_by(
             "song_part___order", "pk",
         )
         for pa in kit_pas:
             kit_repertoire_by_song.setdefault(pa.song_part.song_id, []).append(pa)
 
-    setlist_songs = {entry.song for entry in GigSetlistEntry.objects.filter(gig=gig, song__isnull=False)}
+    rec_pool = set(
+        BandMembership.objects.filter(band__in=gig_bands).values_list("member_id", flat=True)
+    ) & set(available_by_id)
+    rec_songs = {
+        song.pk: song
+        for song in Song.objects.filter(pk__in=rec_song_ids).prefetch_related("parts")
+    }
+
+    def pool_members(member_ids):
+        return {available_by_id[member_id] for member_id in member_ids if member_id in available_by_id}
+
+    work = []
+    for entry in entries:
+        pool = entry_pool_member_ids(entry)
+        rows = [row for row in part_rows_by_song.get(entry.song_id, []) if row.member_id in pool]
+        rows.sort(key=lambda row: row.pk)
+        work.append((entry, entry.song, rows, pool_members(pool)))
+    for song_id, song in rec_songs.items():
+        rows = [row for row in part_rows_by_song.get(song_id, []) if row.member_id in rec_pool]
+        rows.sort(key=lambda row: row.pk)
+        if not rows and song_id not in kit_repertoire_by_song and song_id not in overrides_by_song:
+            continue
+        work.append((None, song, rows, pool_members(rec_pool)))
+
+    work.sort(key=lambda item: (
+        pool_rank(item[0]),
+        len(item[2]),
+        item[1].title,
+        item[0]._order if item[0] else 0,
+    ))
 
     song_counts_to_return = None
-
-    for song, attendee_part_assignments in sorted(song_to_part_assignments.items(), key=lambda s_apa: (s_apa[0] not in setlist_songs, len(s_apa[1]), s_apa[0].title)):
-        is_in_setlist = song in setlist_songs
-        part_list = list(song.parts.all())
-
-        candidates = list(attendee_part_assignments)
+    for entry, song, rows, available_members in work:
+        song_overrides = overrides_by_song.get(song.id, [])
+        candidates = list(rows)
         if gig_has_kit:
-            injected = inject_drum_kit_cover_assignments(
+            candidates.extend(inject_drum_kit_cover_assignments(
                 song=song,
                 kit_instrument=kit_instrument,
-                available_members=available_member_set,
-                song_overrides=song_to_overrides.get(song, []),
-                cover_players=cover_players,
+                available_members=available_members,
+                song_overrides=song_overrides,
+                cover_players=_cover_players_for(entry, gig_bands, cover_rows),
                 kit_repertoire=kit_repertoire_by_song.get(song.id, []),
-            )
-            candidates.extend(injected)
-
-        part_assignments, score = get_gig_song_part_assignments(
-            part_list, candidates, gig_instruments, member_song_counts, song_to_overrides.get(song, []),
-        )
-        if part_assignments is None:
-            # invalid constraints
+            ))
+        if entry is None and not candidates and not song_overrides:
             continue
 
-        member_song_counts.update([pa.member for pa in part_assignments if pa.instrument.include_in_gig_song_count])
+        part_assignments, score = get_gig_song_part_assignments(
+            list(song.parts.all()),
+            candidates,
+            gig_instruments,
+            member_song_counts,
+            song_overrides,
+            _preferred_member_ids(entry),
+        )
+        if part_assignments is None:
+            continue
 
-        if is_in_setlist:
-            gig_part_assignments_setlist.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
+        member_song_counts.update([
+            pa.member for pa in part_assignments if pa.instrument.include_in_gig_song_count
+        ])
+        result = GigPartAssignment(
+            song=song,
+            part_assignments=part_assignments,
+            score=score,
+            attendees=attendees,
+            gig_instruments=gig_instruments,
+            setlist_entry=entry,
+        )
+        if entry is not None:
+            gig_part_assignments_setlist.append(result)
             song_counts_to_return = member_song_counts.copy()
         else:
-            gig_part_assignments_recs.append(GigPartAssignment(song=song, part_assignments=part_assignments, score=score, attendees=attendees, gig_instruments=gig_instruments))
+            gig_part_assignments_recs.append(result)
 
     if song_counts_to_return is None:
         song_counts_to_return = member_song_counts
 
-    gig_part_assignments_setlist = sorted(gig_part_assignments_setlist, key=lambda x: x.song.title)
+    gig_part_assignments_setlist = sorted(
+        gig_part_assignments_setlist,
+        key=lambda x: (x.song.title, x.setlist_entry._order if x.setlist_entry else 0),
+    )
     gig_part_assignments_recs = sorted(gig_part_assignments_recs, key=lambda x: (-x.score, x.song.title))
 
     return gig_part_assignments_setlist, gig_part_assignments_recs, song_counts_to_return

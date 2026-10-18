@@ -3,10 +3,9 @@
 {% block title %}New Gig Part Assignment Override | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
-    > <a href={% url 'band:gig_list' %}>Gigs</a>
-    > <a href={% url 'band:gig_detail' form.gig_id %}>{{ form.gig_name }}</a>
-    > <a href={% url 'band:gig_part_assignments_detail' form.gig_id %}>Part Assignments</a>
+    > <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' band.slug form.gig_id %}>{{ form.gig_name }}</a>
+    > <a href={% url 'band:gig_part_assignments_detail' band.slug form.gig_id %}>Part Assignments</a>
     > New Gig Part Assignment Override
 {% endblock %}
 

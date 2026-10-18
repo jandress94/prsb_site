@@ -3,16 +3,29 @@
 {% block title %}Band Members | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
     > Band Members
 {% endblock %}
 
 {% block content %}
     <h2>Band Members</h2>
+
+    {% if linkable_members %}
+        <form method="post" action={% url 'band:member_link' band.slug %}>{% csrf_token %}
+            <label for="member-link-select">Add member</label>
+            <select name="member" id="member-link-select" required>
+                <option value="">---------</option>
+                {% for member in linkable_members %}
+                    <option value="{{ member.pk }}">{{ member }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Link</button>
+        </form>
+    {% endif %}
+
     <ul>
         {% for member in object_list %}
             <li>
-                <a href={% url 'band:member_detail' member.user_id %}>
+                <a href={% url 'band:member_detail' band.slug member.user_id %}>
                     {{ member }}
                 </a>
             </li>

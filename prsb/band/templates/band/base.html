@@ -18,6 +18,15 @@
 <body>
     <div id="content">
         <nav>
+            {% if band %}
+                <a href="{% url 'band:home' %}">Home</a>
+                &gt;
+                {% if request.resolver_match.url_name == "band_home" %}
+                    {{ band.name }}
+                {% else %}
+                    <a href="{% url 'band:band_home' band.slug %}">{{ band.name }}</a>
+                {% endif %}
+            {% endif %}
             {% block nav %}{% endblock %}
         </nav>
         {% block content %}{% endblock %}

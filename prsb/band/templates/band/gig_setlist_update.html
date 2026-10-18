@@ -3,9 +3,8 @@
 {% block title %}{{ gig.name }} Setlist | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:index' %}>Home</a>
-    > <a href={% url 'band:gig_list' %}>Gigs</a>
-    > <a href={% url 'band:gig_detail' gig.id %}>{{ gig.name }}</a>
+    > <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
+    > <a href={% url 'band:gig_detail' band.slug gig.id %}>{{ gig.name }}</a>
     > Update Setlist
 {% endblock %}
 
@@ -45,6 +44,10 @@
       <thead>
         <tr>
           <th>Song</th>
+          {% if show_staffing_fields %}
+          <th>Players</th>
+          <th>Band</th>
+          {% endif %}
           <th>Break Duration</th>
           <th>Remove</th>
         </tr>
@@ -56,6 +59,10 @@
                 {{ hidden }}  {# Keep hidden fields like the form ID #}
             {% endfor %}
             <td>{{ entry_form.song }}</td>
+            {% if show_staffing_fields %}
+            <td>{{ entry_form.staffing_mode }}</td>
+            <td>{{ entry_form.staffing_band }}</td>
+            {% endif %}
             <td>{{ entry_form.break_duration }}</td>
             <td>
                 <button type="button" class="remove-entry">❌</button>
@@ -79,6 +86,10 @@
             {{ hidden }}  {# Keep hidden fields like the form ID #}
         {% endfor %}
         <td>{{ formset.empty_form.song }}</td>
+        {% if show_staffing_fields %}
+        <td>{{ formset.empty_form.staffing_mode }}</td>
+        <td>{{ formset.empty_form.staffing_band }}</td>
+        {% endif %}
         <td>{{ formset.empty_form.break_duration }}</td>
         <td>
             <button type="button" class="remove-entry">❌</button>

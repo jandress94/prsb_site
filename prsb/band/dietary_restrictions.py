@@ -2,7 +2,7 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.functions import Trim
 from django.utils import timezone
 
-from .models import BandMember, Gig, GigAttendance
+from .models import Band, BandMember, Gig, GigAttendance
 
 STATUS_NO_STATUS = "no_status"
 ALLOWED_STATUSES = frozenset({
@@ -20,7 +20,7 @@ STATUS_LABELS = {
 _MAX_SIGNED_PK = 2**63 - 1
 
 
-def resolve_gig(raw: str | None) -> Gig | None:
+def resolve_gig(raw: str | None, *, band: Band) -> Gig | None:
     if raw is None or raw == "":
         return None
     try:
@@ -29,7 +29,10 @@ def resolve_gig(raw: str | None) -> Gig | None:
         return None
     if pk < 1 or pk > _MAX_SIGNED_PK:
         return None
-    return Gig.objects.filter(pk=pk).first()
+    gig = Gig.objects.filter(pk=pk).first()
+    if gig is None or not gig.bands.filter(pk=band.pk).exists():
+        return None
+    return gig
 
 
 def resolve_statuses(
@@ -53,12 +56,17 @@ def status_caption_labels(statuses: list[str]) -> list[str]:
     return [STATUS_LABELS[value] for value in statuses if value in STATUS_LABELS]
 
 
-def _base_members() -> QuerySet:
+def _base_members(band: Band) -> QuerySet:
     return (
         BandMember.objects.annotate(_diet=Trim("dietary_restrictions"))
-        .filter(user__is_active=True)
+        .filter(
+            user__is_active=True,
+            bandmembership__band=band,
+            bandmembership__is_active=True,
+        )
         .exclude(_diet="")
         .order_by("user__first_name", "user__last_name")
+        .distinct()
     )
 
 
@@ -66,8 +74,9 @@ def dietary_restriction_members(
     *,
     gig: Gig | None,
     statuses: list[str] | None,
+    band: Band,
 ) -> QuerySet:
-    qs = _base_members()
+    qs = _base_members(band)
     if gig is None or statuses is None:
         return qs
     if not statuses:
@@ -91,12 +100,18 @@ def dietary_restriction_members(
     return qs.filter(combined)
 
 
-def upcoming_gigs() -> QuerySet:
-    return Gig.objects.filter(end_datetime__gte=timezone.now()).order_by("start_datetime")
+def upcoming_gigs(band: Band) -> QuerySet:
+    return (
+        Gig.objects.filter(bands=band, end_datetime__gte=timezone.now())
+        .order_by("start_datetime")
+    )
 
 
-def past_gigs() -> QuerySet:
-    return Gig.objects.filter(end_datetime__lt=timezone.now()).order_by("-start_datetime", "-pk")
+def past_gigs(band: Band) -> QuerySet:
+    return (
+        Gig.objects.filter(bands=band, end_datetime__lt=timezone.now())
+        .order_by("-start_datetime", "-pk")
+    )
 
 
 def gig_picker_rows(gigs) -> list[dict]:
