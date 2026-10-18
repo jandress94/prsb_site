@@ -2108,11 +2108,8 @@ class BandRoutingTestCase(TestCase):
         )
         solo.bands.add(prsb)
         solo_page = self.client.get(reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": solo.pk}))
-        self.assertContains(
-            solo_page,
-            reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": solo.pk}),
-        )
-        self.assertContains(solo_page, prsb.name)
+        self.assertContains(solo_page, f"Bands:\n        \n            {prsb.name}")
+        self.assertNotContains(solo_page, f'href="{reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": solo.pk})}"')
 
         other = Band.objects.create(name="Guest", slug="guest")
         shared = Gig.objects.create(
@@ -2122,12 +2119,12 @@ class BandRoutingTestCase(TestCase):
         )
         shared.bands.add(prsb, other)
         shared_page = self.client.get(reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": shared.pk}))
-        for slug in ("prsb", "guest"):
-            self.assertContains(
-                shared_page,
-                reverse("band:gig_detail", kwargs={"slug": slug, "pk": shared.pk}),
-            )
         self.assertContains(shared_page, "Guest")
+        self.assertContains(shared_page, prsb.name)
+        self.assertNotContains(
+            shared_page,
+            reverse("band:gig_detail", kwargs={"slug": "guest", "pk": shared.pk}),
+        )
 
 
 class BandPageScopeTestCase(TestCase):

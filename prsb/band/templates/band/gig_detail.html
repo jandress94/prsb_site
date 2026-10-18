@@ -14,7 +14,7 @@
     <a href={% url 'band:gig_update' band.slug gig.id %}>Edit Gig Information</a>
     <p>Bands:
         {% for gig_band in gig.bands.all %}
-            <a href="{% url 'band:gig_detail' gig_band.slug gig.id %}">{{ gig_band.name }}</a>{% if not forloop.last %}, {% endif %}
+            {{ gig_band.name }}{% if not forloop.last %}, {% endif %}
         {% endfor %}
     </p>
     <p>Start: {{ gig.start_datetime|localtime }}</p>
