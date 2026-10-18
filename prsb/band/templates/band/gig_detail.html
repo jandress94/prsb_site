@@ -12,6 +12,11 @@
 {% block content %}
     <h1>{{gig.name}}</h1>
     <a href={% url 'band:gig_update' band.slug gig.id %}>Edit Gig Information</a>
+    <p>Bands:
+        {% for gig_band in gig.bands.all %}
+            <a href="{% url 'band:gig_detail' gig_band.slug gig.id %}">{{ gig_band.name }}</a>{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+    </p>
     <p>Start: {{ gig.start_datetime|localtime }}</p>
     <p>End: {{ gig.end_datetime|localtime }}</p>
     <p>Address: {{ gig.address }}</p>

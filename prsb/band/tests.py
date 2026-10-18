@@ -2099,6 +2099,36 @@ class BandRoutingTestCase(TestCase):
         missing = self.client.get(reverse("band:gig_detail", kwargs={"slug": outsider.slug, "pk": gig.pk}))
         self.assertEqual(missing.status_code, 404)
 
+    def test_gig_detail_lists_every_band_on_the_gig(self):
+        prsb = Band.objects.get(slug="prsb")
+        solo = Gig.objects.create(
+            name="Solo Gig",
+            start_datetime=timezone.now() + timedelta(days=2),
+            end_datetime=timezone.now() + timedelta(days=2, hours=2),
+        )
+        solo.bands.add(prsb)
+        solo_page = self.client.get(reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": solo.pk}))
+        self.assertContains(
+            solo_page,
+            reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": solo.pk}),
+        )
+        self.assertContains(solo_page, prsb.name)
+
+        other = Band.objects.create(name="Guest", slug="guest")
+        shared = Gig.objects.create(
+            name="Shared Detail Gig",
+            start_datetime=timezone.now() + timedelta(days=3),
+            end_datetime=timezone.now() + timedelta(days=3, hours=2),
+        )
+        shared.bands.add(prsb, other)
+        shared_page = self.client.get(reverse("band:gig_detail", kwargs={"slug": "prsb", "pk": shared.pk}))
+        for slug in ("prsb", "guest"):
+            self.assertContains(
+                shared_page,
+                reverse("band:gig_detail", kwargs={"slug": slug, "pk": shared.pk}),
+            )
+        self.assertContains(shared_page, "Guest")
+
 
 class BandPageScopeTestCase(TestCase):
     @classmethod
