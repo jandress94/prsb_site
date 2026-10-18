@@ -960,7 +960,15 @@ class GigSetlistUpdateView(BandScopedMixin, generic.View):
 class GigSetlistAddSongView(BandScopedMixin, generic.View):
     def post(self, request, *args, **kwargs):
         gig_id = kwargs["gig_id"]
-        get_gig_for_band(gig_id, self.band)
+        gig = get_gig_for_band(gig_id, self.band)
+        if gig.bands.count() >= 2:
+            return HttpResponseRedirect(
+                reverse(
+                    "band:gig_setlist_update",
+                    kwargs={"slug": self.band.slug, "gig_id": gig_id},
+                )
+            )
+
         setlist_entry = GigSetlistEntry(gig_id=gig_id, song_id=kwargs["song_id"])
         setlist_entry.save()
 

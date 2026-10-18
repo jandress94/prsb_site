@@ -2127,6 +2127,44 @@ class GigStaffingValidationTestCase(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("member", form.errors)
 
+    def test_add_song_on_one_band_gig_creates_entry(self):
+        prsb = Band.objects.get(slug=PRSB_SLUG)
+        gig = Gig.objects.create(
+            name="One-band add song",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        gig.bands.set([prsb])
+        song = self.link_song(prsb, "Quick add")
+        url = reverse(
+            "band:gig_setlist_add_song",
+            kwargs={"slug": prsb.slug, "gig_id": gig.pk, "song_id": song.pk},
+        )
+        response = self.client.post(url)
+        self.assertRedirects(
+            response,
+            reverse("band:gig_part_assignments_detail", kwargs={"slug": prsb.slug, "pk": gig.pk}),
+        )
+        entry = gig.gigsetlistentry_set.get()
+        self.assertEqual(entry.song_id, song.pk)
+        self.assertEqual(entry.staffing_mode, "")
+        self.assertIsNone(entry.staffing_band_id)
+
+    def test_add_song_on_multi_band_gig_redirects_without_creating_entry(self):
+        gig = self.make_two_band_gig()
+        first = gig.bands.order_by("name").first()
+        song = self.link_song(first, "Needs staffing")
+        url = reverse(
+            "band:gig_setlist_add_song",
+            kwargs={"slug": first.slug, "gig_id": gig.pk, "song_id": song.pk},
+        )
+        response = self.client.post(url)
+        self.assertRedirects(
+            response,
+            reverse("band:gig_setlist_update", kwargs={"slug": first.slug, "gig_id": gig.pk}),
+        )
+        self.assertEqual(gig.gigsetlistentry_set.count(), 0)
+
 
 class BandSongRotationTestCase(TestCase):
     def test_rotation_is_per_band(self):
