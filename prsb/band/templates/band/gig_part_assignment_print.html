@@ -8,7 +8,6 @@
 {% block title %}{{ gig.name }} | Part Assignments | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:band_home' band.slug %}>Home</a>
     > <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
     > <a href={% url 'band:gig_detail' band.slug gig.id %}>{{ gig.name }}</a>
     > <a href={% url 'band:gig_part_assignments_detail' band.slug gig.id %}>Part Assignments</a>

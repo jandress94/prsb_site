@@ -13,4 +13,7 @@
             <li><a href="{% url 'band:band_home' band.slug %}">{{ band.name }}</a></li>
         {% endfor %}
     </ul>
+    <a href="{% url 'band:instrument_list' %}">Instruments</a>
+    <br />
+    <a href="{% url 'admin:index' %}">Admin Site</a>
 {% endblock %}

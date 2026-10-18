@@ -18,7 +18,6 @@ urlpatterns = [
     path("bands/<slug:slug>/", views.BandHomeView.as_view(), name="band_home"),
     path("bands/<slug:slug>/members/", views.MemberListView.as_view(), name="member_list"),
     path("bands/<slug:slug>/members/link/", views.MemberLinkView.as_view(), name="member_link"),
-    path("bands/<slug:slug>/members/unlink/", views.MemberUnlinkView.as_view(), name="member_unlink"),
     path("bands/<slug:slug>/members/<int:pk>/", views.MemberDetailView.as_view(), name="member_detail"),
     path(
         "bands/<slug:slug>/members/<int:member_id>/part-assignments/create/",
@@ -33,7 +32,6 @@ urlpatterns = [
 
     path("bands/<slug:slug>/songs/", views.SongListView.as_view(), name="song_list"),
     path("bands/<slug:slug>/songs/link/", views.SongLinkView.as_view(), name="song_link"),
-    path("bands/<slug:slug>/songs/unlink/", views.SongUnlinkView.as_view(), name="song_unlink"),
     path("bands/<slug:slug>/songs/create/", views.SongCreateView.as_view(), name="song_create"),
     path("bands/<slug:slug>/songs/<int:pk>/", views.SongDetailView.as_view(), name="song_detail"),
     path("bands/<slug:slug>/songs/<int:pk>/update/", views.SongUpdateView.as_view(), name="song_update"),
@@ -46,18 +44,6 @@ urlpatterns = [
         "bands/<slug:slug>/songs/<int:song_id>/part-assignments/<int:pk>/update/",
         views.SongPartAssignmentUpdateView.as_view(),
         name="song_part_assignment_update",
-    ),
-
-    path("bands/<slug:slug>/part-assignments/", views.PartAssignmentListView.as_view(), name="part_assignment_list"),
-    path(
-        "bands/<slug:slug>/part-assignments/create/",
-        views.PartAssignmentCreateView.as_view(),
-        name="part_assignment_create",
-    ),
-    path(
-        "bands/<slug:slug>/part-assignments/<int:pk>/update/",
-        views.PartAssignmentUpdateView.as_view(),
-        name="part_assignment_update",
     ),
 
     path("bands/<slug:slug>/gigs/", views.GigListView.as_view(), name="gig_list"),

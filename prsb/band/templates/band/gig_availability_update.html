@@ -3,7 +3,6 @@
 {% block title %}{{ gig.name }} Member Availability | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:band_home' band.slug %}>Home</a>
     > <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
     > <a href={% url 'band:gig_detail' band.slug gig.id %}>{{ gig.name }}</a>
     > Update Member Availability

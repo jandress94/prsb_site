@@ -2,10 +2,6 @@
 
 {% block title %}PRSB{% endblock %}
 
-{% block nav %}
-    Home
-{% endblock %}
-
 {% block content %}
 {#    <a href={% url 'band:profile_detail' %}>My Profile</a>#}
 {#    <br />#}
@@ -13,13 +9,7 @@
     <br />
     <a href={% url 'band:song_list' band.slug %}>Songs</a>
     <br />
-    <a href={% url 'band:part_assignment_list' band.slug %}>Part Assignments</a>
-    <br />
     <a href={% url 'band:gig_list' band.slug %}>Gigs</a>
     <br />
-    <a href={% url 'band:instrument_list' %}>Instruments</a>
-    <br />
     <a href="{% url 'band:reports' band.slug %}">Reports</a>
-    <br />
-    <a href="{% url 'admin:index' %}">Admin Site</a>
 {% endblock %}

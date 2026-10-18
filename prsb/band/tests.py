@@ -1,3 +1,4 @@
+import html
 import re
 from datetime import timedelta
 
@@ -8,7 +9,7 @@ from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from djangoyearlessdate.helpers import YearlessDate
 from django.test import TestCase, TransactionTestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from band.models import (
@@ -2039,10 +2040,22 @@ class SongAbsoluteUrlTestCase(TestCase):
             song.get_absolute_url()
 
 
+def _nav_text(response):
+    nav = response.content.decode().split("<nav>", 1)[1].split("</nav>", 1)[0]
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", nav)).strip()
+    return html.unescape(text)
+
+
 class BandRoutingTestCase(TestCase):
-    def test_one_active_band_redirects_home(self):
+    def test_home_lists_the_band_and_global_links(self):
         response = self.client.get(reverse("band:home"))
-        self.assertRedirects(response, reverse("band:band_home", kwargs={"slug": "prsb"}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("band:band_home", kwargs={"slug": "prsb"}))
+        self.assertContains(response, reverse("band:instrument_list"))
+        self.assertContains(response, reverse("admin:index"))
+        band_home = self.client.get(reverse("band:band_home", kwargs={"slug": "prsb"}))
+        self.assertNotContains(band_home, reverse("band:instrument_list"))
+        self.assertNotContains(band_home, reverse("admin:index"))
 
     def test_inactive_band_is_hidden_but_url_opens(self):
         Band.objects.create(name="Old", slug="old", is_active=False)
@@ -2054,6 +2067,17 @@ class BandRoutingTestCase(TestCase):
     def test_unknown_band_is_404(self):
         response = self.client.get("/bands/missing/")
         self.assertEqual(response.status_code, 404)
+
+    def test_band_name_is_a_breadcrumb_not_a_header_switcher(self):
+        other = Band.objects.create(name="Guest Band", slug="guest")
+        home = self.client.get(reverse("band:band_home", kwargs={"slug": "prsb"}))
+        self.assertEqual(_nav_text(home), "Home > PRSB")
+        self.assertNotContains(home, reverse("band:band_home", kwargs={"slug": "guest"}))
+
+        gigs = self.client.get(reverse("band:gig_list", kwargs={"slug": other.slug}))
+        self.assertEqual(_nav_text(gigs), "Home > Guest Band > Gigs")
+        self.assertContains(gigs, reverse("band:home"))
+        self.assertContains(gigs, reverse("band:band_home", kwargs={"slug": "guest"}))
 
     def test_old_gig_list_is_gone(self):
         response = self.client.get("/gigs/")
@@ -2092,26 +2116,6 @@ class BandPageScopeTestCase(TestCase):
         song_response = self.client.get(reverse("band:song_list", kwargs={"slug": "other"}))
         self.assertEqual(list(song_response.context["object_list"]), [])
 
-    def test_missing_person_rows_stay_on_this_bands_active_roster_and_songs(self):
-        insider = User.objects.create_user(username="missing_in", first_name="In", last_name="Side")
-        outsider = User.objects.create_user(username="missing_out", first_name="Out", last_name="Side")
-        BandMembership.objects.create(band=self.prsb, member=insider.bandmember, is_active=True)
-        BandMembership.objects.create(band=self.other, member=outsider.bandmember, is_active=True)
-        active_song = Song.objects.create(title="Active Missing Song")
-        BandSong.objects.create(band=self.prsb, song=active_song, is_active=True)
-        foreign_song = Song.objects.create(title="Foreign Missing Song")
-        BandSong.objects.create(band=self.other, song=foreign_song, is_active=True)
-        inactive_song = Song.objects.create(title="Inactive Missing Song")
-        BandSong.objects.create(band=self.prsb, song=inactive_song, is_active=False)
-
-        response = self.client.get(reverse("band:part_assignment_list", kwargs={"slug": "prsb"}))
-        rows = set(response.context["missing_person_songs"])
-        self.assertIn(("In Side", "Active Missing Song"), rows)
-        self.assertNotIn(("Out Side", "Active Missing Song"), rows)
-        self.assertNotIn(("Out Side", "Foreign Missing Song"), rows)
-        self.assertNotIn(("In Side", "Foreign Missing Song"), rows)
-        self.assertNotIn(("In Side", "Inactive Missing Song"), rows)
-
     def test_deactivate_hides_member_and_link_reactivates(self):
         membership = BandMembership.objects.get(band=self.prsb, member=self.user.bandmember)
         membership.is_active = False
@@ -2126,6 +2130,57 @@ class BandPageScopeTestCase(TestCase):
         )
         membership.refresh_from_db()
         self.assertTrue(membership.is_active)
+
+    def test_member_and_song_lists_have_no_deactivate_action(self):
+        members = self.client.get(reverse("band:member_list", kwargs={"slug": "prsb"}))
+        songs = self.client.get(reverse("band:song_list", kwargs={"slug": "prsb"}))
+        self.assertNotContains(members, "Deactivate")
+        self.assertNotContains(songs, "Deactivate")
+        for url_name in ("band:member_unlink", "band:song_unlink"):
+            with self.assertRaises(NoReverseMatch):
+                reverse(url_name, kwargs={"slug": "prsb"})
+
+    def test_song_detail_shows_parts_for_active_members_only(self):
+        lead = SongPart.objects.create(song=self.song, name="Lead")
+        pad = SongPart.objects.create(song=self.song, name="Pad")
+        trumpet = Instrument.objects.create(name="Trumpet Scope", order=0)
+        inactive_user = User.objects.create_user(
+            username="inactive_part", first_name="Gone", last_name="Member",
+        )
+        BandMembership.objects.create(
+            band=self.prsb, member=inactive_user.bandmember, is_active=False,
+        )
+        other_user = User.objects.create_user(
+            username="other_part", first_name="Other", last_name="Band",
+        )
+        BandMembership.objects.create(band=self.other, member=other_user.bandmember)
+        unassigned = User.objects.create_user(
+            username="unassigned_part", first_name="Needs", last_name="Part",
+        )
+        BandMembership.objects.create(band=self.prsb, member=unassigned.bandmember)
+        PartAssignment.objects.create(
+            member=self.user.bandmember, song_part=lead, instrument=trumpet,
+        )
+        PartAssignment.objects.create(
+            member=inactive_user.bandmember, song_part=lead, instrument=trumpet,
+        )
+        PartAssignment.objects.create(
+            member=other_user.bandmember, song_part=lead, instrument=trumpet,
+        )
+        PartAssignment.objects.create(
+            member=inactive_user.bandmember, song_part=pad, instrument=trumpet,
+        )
+
+        response = self.client.get(
+            reverse("band:song_detail", kwargs={"slug": "prsb", "pk": self.song.pk}),
+        )
+        shown = list(response.context["part_assignments"])
+        self.assertEqual([row.member for row in shown], [self.user.bandmember])
+        self.assertEqual([part.name for part in response.context["missing_parts"]], ["Pad"])
+        self.assertEqual(list(response.context["missing_members"]), [unassigned.bandmember])
+        self.assertContains(response, "Scope User")
+        self.assertNotContains(response, "Gone Member")
+        self.assertNotContains(response, "Other Band")
 
     def test_song_active_on_other_band_appears_in_link_select(self):
         response = self.client.get(reverse("band:song_list", kwargs={"slug": "other"}))

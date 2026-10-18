@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
@@ -35,10 +34,7 @@ from .validation import entry_pool_member_ids, validate_entry_change, validate_g
 
 
 def home(request):
-    bands = list(active_bands())
-    if len(bands) == 1:
-        return redirect("band:band_home", slug=bands[0].slug)
-    return render(request, "band/home.html", {"bands": bands})
+    return render(request, "band/home.html", {"bands": list(active_bands())})
 
 
 class BandScopedMixin:
@@ -198,15 +194,21 @@ class SongDetailView(BandScopedMixin, generic.DetailView):
             bandsong__is_active=True,
         ).exclude(pk=self.band.pk)
 
+        active_members = BandMember.objects.filter(
+            bandmembership__band=self.band,
+            bandmembership__is_active=True,
+            user__is_active=True,
+        ).order_by('user__first_name', 'user__last_name')
         context["part_assignments"] = part_assignments = PartAssignment.objects.filter(
-            song_part__song=song
+            song_part__song=song,
+            member__in=active_members,
         ).order_by('song_part___order', 'instrument__name', 'member__user__first_name', 'member__user__last_name')
 
         all_parts = SongPart.objects.filter(song=song)
         context['missing_parts'] = [p for p in all_parts if p not in {pa.song_part for pa in part_assignments}]
 
-        all_members = BandMember.objects.filter(user__is_active=True)
-        context['missing_members'] = [m for m in all_members if m not in {pa.member for pa in part_assignments}]
+        assigned_member_ids = {pa.member_id for pa in part_assignments}
+        context['missing_members'] = [m for m in active_members if m.pk not in assigned_member_ids]
 
         return context
 
@@ -317,116 +319,12 @@ class MemberLinkView(BandScopedMixin, generic.View):
         return redirect("band:member_list", slug=slug)
 
 
-class MemberUnlinkView(BandScopedMixin, generic.View):
-    def post(self, request, slug):
-        membership = get_object_or_404(
-            BandMembership,
-            band=self.band,
-            member_id=request.POST.get("member"),
-        )
-        membership.is_active = False
-        membership.save(update_fields=["is_active"])
-        return redirect("band:member_list", slug=slug)
-
-
 class SongLinkView(BandScopedMixin, generic.View):
     def post(self, request, slug):
         song = get_object_or_404(Song, pk=request.POST.get("song"))
         in_gig_rotation = request.POST.get("in_gig_rotation") == "on"
         link_song(self.band, song, in_gig_rotation=in_gig_rotation)
         return redirect("band:song_list", slug=slug)
-
-
-class SongUnlinkView(BandScopedMixin, generic.View):
-    def post(self, request, slug):
-        band_song = get_object_or_404(
-            BandSong,
-            band=self.band,
-            song_id=request.POST.get("song"),
-        )
-        band_song.is_active = False
-        band_song.save(update_fields=["is_active"])
-        return redirect("band:song_list", slug=slug)
-
-
-def get_missing_person_songs(band):
-    member_ids = list(
-        BandMembership.objects.filter(
-            band=band,
-            is_active=True,
-            member__user__is_active=True,
-        ).values_list("member_id", flat=True)
-    )
-    song_ids = list(
-        BandSong.objects.filter(band=band, is_active=True).values_list("song_id", flat=True)
-    )
-    if not member_ids or not song_ids:
-        return []
-    member_placeholders = ", ".join(["%s"] * len(member_ids))
-    song_placeholders = ", ".join(["%s"] * len(song_ids))
-    with connection.cursor() as cursor:
-        query = f"""
-            WITH missing_ids AS (
-                SELECT
-                    b.user_id,
-                    s.title
-                FROM
-                    {BandMember._meta.db_table} b,
-                    {Song._meta.db_table} s
-                WHERE
-                    b.user_id IN ({member_placeholders})
-                    AND s.id IN ({song_placeholders})
-                    AND NOT EXISTS (
-                        SELECT 
-                            1
-                        FROM 
-                            {PartAssignment._meta.db_table} p
-                        INNER JOIN 
-                            {SongPart._meta.db_table} sp
-                        ON
-                            p.song_part_id = sp.id
-                        WHERE
-                            p.member_id = b.user_id
-                            AND sp.song_id = s.id
-                    )
-                )
-                SELECT
-                    u.first_name || ' ' || u.last_name AS name,
-                    m.title
-                FROM
-                    missing_ids m
-                INNER JOIN
-                    {User._meta.db_table} u
-                ON
-                    m.user_id = u.id
-                WHERE
-                    u.is_active
-                ORDER BY
-                    title, name
-        """
-        cursor.execute(query, [*member_ids, *song_ids])
-
-        return cursor.fetchall()
-
-
-class PartAssignmentListView(BandScopedMixin, generic.ListView):
-    model = PartAssignment
-
-    def get_queryset(self):
-        return PartAssignment.objects.filter(
-            member__user__is_active=True,
-            song_part__song__band_songs__band=self.band,
-            song_part__song__band_songs__is_active=True,
-        ).order_by('song_part__song__title',
-                   'song_part___order',
-                   'instrument__name',
-                   'member__user__first_name',
-                   'member__user__last_name')
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['missing_person_songs'] = get_missing_person_songs(self.band)
-        return context
 
 
 class PartAssignmentForm(forms.ModelForm):
@@ -471,21 +369,6 @@ class PartAssignmentForm(forms.ModelForm):
         if song_part is not None and not song_part.has_solo:
             cleaned_data['can_solo'] = False
         return cleaned_data
-
-
-class PartAssignmentCreateView(BandScopedMixin, generic.CreateView):
-    model = PartAssignment
-    form_class = PartAssignmentForm
-    template_name_suffix = '_create_form'
-
-    def get_success_url(self):
-        return reverse("band:part_assignment_list", kwargs={"slug": self.band.slug})
-
-
-class PartAssignmentUpdateView(BandScopedMixin, generic.UpdateView):
-    model = PartAssignment
-    form_class = PartAssignmentForm
-    template_name_suffix = '_update_form'
 
 
 class MemberPartAssignmentCreateView(BandScopedMixin, generic.CreateView):

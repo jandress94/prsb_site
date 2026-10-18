@@ -3,7 +3,6 @@
 {% block title %}Band Members | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:band_home' band.slug %}>Home</a>
     > Band Members
 {% endblock %}
 
@@ -29,11 +28,6 @@
                 <a href={% url 'band:member_detail' band.slug member.user_id %}>
                     {{ member }}
                 </a>
-                <form method="post" action={% url 'band:member_unlink' band.slug %} style="display:inline">
-                    {% csrf_token %}
-                    <input type="hidden" name="member" value="{{ member.pk }}">
-                    <button type="submit">Deactivate</button>
-                </form>
             </li>
         {% endfor %}
     </ul>

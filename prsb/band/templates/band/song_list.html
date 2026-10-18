@@ -3,7 +3,6 @@
 {% block title %}Songs | PRSB{% endblock %}
 
 {% block nav %}
-    <a href={% url 'band:band_home' band.slug %}>Home</a>
     > Songs
 {% endblock %}
 
@@ -32,11 +31,6 @@
         {% for song in object_list %}
             <li>
                 <a href={% url 'band:song_detail' band.slug song.id %}>{{ song.title }}</a>
-                <form method="post" action={% url 'band:song_unlink' band.slug %} style="display:inline">
-                    {% csrf_token %}
-                    <input type="hidden" name="song" value="{{ song.pk }}">
-                    <button type="submit">Deactivate</button>
-                </form>
             </li>
         {% endfor %}
     </ul>
