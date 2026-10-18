@@ -786,6 +786,7 @@ class CoverageRiskScoringTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.now = timezone.now()
+        cls.prsb = Band.objects.get(slug="prsb")
         cls.lead = Instrument.objects.create(name="Lead", order=0)
         cls.bass = Instrument.objects.create(name="Bass", order=1)
 
@@ -795,6 +796,8 @@ class CoverageRiskScoringTestCase(TestCase):
         cls.alice = BandMember.objects.get(user=cls.alice_user)
         cls.bob = BandMember.objects.get(user=cls.bob_user)
         cls.cara = BandMember.objects.get(user=cls.cara_user)
+        for member in (cls.alice, cls.bob, cls.cara):
+            BandMembership.objects.create(band=cls.prsb, member=member)
 
         cls.song = Song.objects.create(title="Yellow Bird")
         BandSong.objects.create(
@@ -814,11 +817,13 @@ class CoverageRiskScoringTestCase(TestCase):
 
     def _past_gig(self, days_ago, *, small=False, name=None):
         start = self.now - timedelta(days=days_ago)
-        return Gig.objects.create(
-            name=name or f"Gig-{days_ago}",
-            start_datetime=start,
-            end_datetime=start + timedelta(hours=2),
-            is_small_group=small,
+        return _link_gig_to_prsb(
+            Gig.objects.create(
+                name=name or f"Gig-{days_ago}",
+                start_datetime=start,
+                end_datetime=start + timedelta(hours=2),
+                is_small_group=small,
+            )
         )
 
     def test_zero_gigs_attendance_rate_is_one(self):
@@ -826,7 +831,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_lead, instrument=self.lead,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         self.assertEqual(report.lookback_gigs_used, 0)
         song = report.songs[0]
         lead = next(p for p in song.parts if p.song_part.id == self.part_lead.id)
@@ -847,7 +852,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_lead, instrument=self.lead,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         self.assertEqual(report.lookback_gigs_used, 1)
         lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
         self.assertAlmostEqual(lead.coverers[0].attendance_rate, 1.0)
@@ -861,7 +866,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_lead, instrument=self.lead,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         self.assertEqual(report.lookback_gigs_used, 2)
         lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
         self.assertAlmostEqual(lead.effective_coverage, 0.5)
@@ -879,7 +884,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.bob, song_part=self.part_lead, instrument=self.bass,
             performance_readiness=PerformanceReadiness.NOT_READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
         self.assertAlmostEqual(lead.effective_coverage, 0.5)  # backup * 1.0
         self.assertEqual(len(lead.coverers), 1)
@@ -895,7 +900,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_lead, instrument=self.bass,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
         self.assertAlmostEqual(lead.effective_coverage, 1.0)
         self.assertEqual(len(lead.coverers), 2)
@@ -912,7 +917,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.bob, song_part=self.part_lead, instrument=self.bass,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
         self.assertAlmostEqual(lead.effective_coverage, 2.0)
         self.assertEqual(len(lead.coverers), 2)
@@ -928,7 +933,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_bass, instrument=self.bass,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         song = next(s for s in report.songs if s.song.id == self.song.id)
         by_part = {p.song_part.name: p.effective_coverage for p in song.parts}
         self.assertAlmostEqual(by_part["Lead"], 1.0)
@@ -942,7 +947,7 @@ class CoverageRiskScoringTestCase(TestCase):
             performance_readiness=PerformanceReadiness.READY,
         )
         # Bass uncovered
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         titles = [s.song.title for s in report.songs]
         self.assertIn("Yellow Bird", titles)
         self.assertNotIn("Not In Rotation", titles)
@@ -955,7 +960,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_lead, instrument=self.lead,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         song = next(s for s in report.songs if s.song.id == self.song.id)
         names = {m.user.username for m in song.unassigned_members}
         self.assertNotIn("cr_alice", names)
@@ -971,7 +976,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=inactive_member, song_part=self.part_lead, instrument=self.lead,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         song = next(s for s in report.songs if s.song.id == self.song.id)
         lead = next(p for p in song.parts if p.song_part.id == self.part_lead.id)
         self.assertAlmostEqual(lead.effective_coverage, 0.0)
@@ -992,7 +997,7 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.alice, song_part=self.part_lead, instrument=self.lead,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         song = next(s for s in report.songs if s.song.id == self.song.id)
         part_names = {p.song_part.name for p in song.parts}
         self.assertNotIn("Engine Room", part_names)
@@ -1012,13 +1017,34 @@ class CoverageRiskScoringTestCase(TestCase):
             member=self.bob, song_part=self.part_lead, instrument=drumset,
             performance_readiness=PerformanceReadiness.READY,
         )
-        report = get_coverage_risk(lookback=10)
+        report = get_coverage_risk(self.prsb, lookback=10)
         lead = next(
             p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id
         )
         self.assertAlmostEqual(lead.effective_coverage, 1.0)
         self.assertEqual(len(lead.coverers), 1)
         self.assertEqual(lead.coverers[0].member.user.username, "cr_alice")
+
+
+class BandReportScopeTestCase(TestCase):
+    def test_coverage_risk_ignores_another_bands_rotation_song(self):
+        other = Band.objects.create(name="Other", slug="other-report")
+        song = Song.objects.create(title="Other Rotation")
+        SongPart.objects.create(song=song, name="Lead")
+        BandSong.objects.create(band=other, song=song, in_gig_rotation=True)
+        report = get_coverage_risk(Band.objects.get(slug="prsb"))
+        self.assertNotIn("Other Rotation", [row.song.title for row in report.songs])
+
+    def test_dietary_gig_outside_the_band_falls_back_to_roster(self):
+        other = Band.objects.create(name="Diet Other", slug="diet-other")
+        gig = Gig.objects.create(
+            name="Other Gig",
+            start_datetime=timezone.now() + timedelta(days=1),
+            end_datetime=timezone.now() + timedelta(days=1, hours=2),
+        )
+        gig.bands.add(other)
+        resolved = resolve_gig(str(gig.pk), band=Band.objects.get(slug="prsb"))
+        self.assertIsNone(resolved)
 
 
 class CoverageRiskViewsTestCase(TestCase):
@@ -1543,6 +1569,8 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
 class DietaryRestrictionQueryTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.prsb = Band.objects.get(slug="prsb")
+
         def member(username, first, last, diet, active=True):
             user = User.objects.create_user(
                 username=username, first_name=first, last_name=last, is_active=active,
@@ -1550,6 +1578,7 @@ class DietaryRestrictionQueryTestCase(TestCase):
             bm = user.bandmember
             bm.dietary_restrictions = diet
             bm.save()
+            BandMembership.objects.create(band=cls.prsb, member=bm)
             return bm
 
         cls.alice = member("dr_alice", "Alice", "Diet", "Vegetarian")
@@ -1560,15 +1589,19 @@ class DietaryRestrictionQueryTestCase(TestCase):
         cls.finn = member("dr_finn", "Finn", "Diet", "No shellfish")
 
         now = timezone.now()
-        cls.gig = Gig.objects.create(
-            name="Harvest Festival",
-            start_datetime=now + timedelta(days=10),
-            end_datetime=now + timedelta(days=10, hours=2),
+        cls.gig = _link_gig_to_prsb(
+            Gig.objects.create(
+                name="Harvest Festival",
+                start_datetime=now + timedelta(days=10),
+                end_datetime=now + timedelta(days=10, hours=2),
+            )
         )
-        cls.past_gig = Gig.objects.create(
-            name="Oak Tree Picnic",
-            start_datetime=now - timedelta(days=20),
-            end_datetime=now - timedelta(days=20) + timedelta(hours=2),
+        cls.past_gig = _link_gig_to_prsb(
+            Gig.objects.create(
+                name="Oak Tree Picnic",
+                start_datetime=now - timedelta(days=20),
+                end_datetime=now - timedelta(days=20) + timedelta(hours=2),
+            )
         )
         GigAttendance.objects.create(
             gig=cls.gig, member=cls.alice, status=GigAttendance.AVAILABLE,
@@ -1581,16 +1614,19 @@ class DietaryRestrictionQueryTestCase(TestCase):
         )
 
     def test_default_excludes_blank_whitespace_inactive(self):
-        names = [m.user.first_name for m in dietary_restriction_members(gig=None, statuses=None)]
+        names = [
+            m.user.first_name
+            for m in dietary_restriction_members(gig=None, statuses=None, band=self.prsb)
+        ]
         self.assertEqual(names, ["Alice", "Bob", "Finn"])
 
     def test_resolve_gig_invalid(self):
-        self.assertIsNone(resolve_gig(None))
-        self.assertIsNone(resolve_gig(""))
-        self.assertIsNone(resolve_gig("abc"))
-        self.assertIsNone(resolve_gig("99999"))
-        self.assertIsNone(resolve_gig("99999999999999999999"))
-        self.assertEqual(resolve_gig(str(self.gig.pk)), self.gig)
+        self.assertIsNone(resolve_gig(None, band=self.prsb))
+        self.assertIsNone(resolve_gig("", band=self.prsb))
+        self.assertIsNone(resolve_gig("abc", band=self.prsb))
+        self.assertIsNone(resolve_gig("99999", band=self.prsb))
+        self.assertIsNone(resolve_gig("99999999999999999999", band=self.prsb))
+        self.assertEqual(resolve_gig(str(self.gig.pk), band=self.prsb), self.gig)
 
     def test_resolve_statuses_ignored_without_gig(self):
         self.assertIsNone(resolve_statuses(
@@ -1627,12 +1663,17 @@ class DietaryRestrictionQueryTestCase(TestCase):
 
     def test_gig_available_default(self):
         statuses = resolve_statuses(gig=self.gig, status_key_present=False, raw_values=[])
-        names = [m.user.first_name for m in dietary_restriction_members(gig=self.gig, statuses=statuses)]
+        names = [
+            m.user.first_name
+            for m in dietary_restriction_members(gig=self.gig, statuses=statuses, band=self.prsb)
+        ]
         self.assertEqual(names, ["Alice"])
 
     def test_gig_available_and_no_status(self):
         members = dietary_restriction_members(
-            gig=self.gig, statuses=[GigAttendance.AVAILABLE, STATUS_NO_STATUS],
+            gig=self.gig,
+            statuses=[GigAttendance.AVAILABLE, STATUS_NO_STATUS],
+            band=self.prsb,
         )
         names = [m.user.first_name for m in members]
         self.assertEqual(names, ["Alice"])
@@ -1645,8 +1686,11 @@ class DietaryRestrictionQueryTestCase(TestCase):
         gabe = user.bandmember
         gabe.dietary_restrictions = "Kosher"
         gabe.save()
+        BandMembership.objects.create(band=self.prsb, member=gabe)
         members = dietary_restriction_members(
-            gig=self.gig, statuses=[GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS],
+            gig=self.gig,
+            statuses=[GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS],
+            band=self.prsb,
         )
         names = [m.user.first_name for m in members]
         self.assertEqual(names, ["Bob", "Gabe"])
@@ -1655,16 +1699,20 @@ class DietaryRestrictionQueryTestCase(TestCase):
         members = dietary_restriction_members(
             gig=self.gig,
             statuses=[GigAttendance.AVAILABLE, GigAttendance.MAYBE_AVAILABLE, STATUS_NO_STATUS],
+            band=self.prsb,
         )
         names = [m.user.first_name for m in members]
         self.assertNotIn("Finn", names)
 
     def test_empty_statuses_yields_no_members(self):
-        self.assertEqual(list(dietary_restriction_members(gig=self.gig, statuses=[])), [])
+        self.assertEqual(
+            list(dietary_restriction_members(gig=self.gig, statuses=[], band=self.prsb)),
+            [],
+        )
 
     def test_unrecognized_statuses_yields_no_members(self):
         self.assertEqual(
-            list(dietary_restriction_members(gig=self.gig, statuses=["unavailable"])),
+            list(dietary_restriction_members(gig=self.gig, statuses=["unavailable"], band=self.prsb)),
             [],
         )
 
@@ -1678,7 +1726,7 @@ class DietaryRestrictionQueryTestCase(TestCase):
         self.assertEqual(status_caption_labels([]), [])
 
     def test_upcoming_gigs_and_picker_rows(self):
-        upcoming = list(upcoming_gigs())
+        upcoming = list(upcoming_gigs(self.prsb))
         self.assertEqual(upcoming, [self.gig])
         rows = gig_picker_rows(Gig.objects.all())
         by_id = {row["id"]: row for row in rows}
@@ -1686,12 +1734,13 @@ class DietaryRestrictionQueryTestCase(TestCase):
         self.assertRegex(by_id[self.gig.pk]["date"], r"^\d{4}-\d{2}-\d{2}$")
 
     def test_past_gigs_excludes_upcoming(self):
-        self.assertEqual(list(past_gigs()), [self.past_gig])
+        self.assertEqual(list(past_gigs(self.prsb)), [self.past_gig])
 
 
 class DietaryRestrictionsViewTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.prsb = Band.objects.get(slug="prsb")
         cls.viewer = User.objects.create_user(username="dr_viewer", password="pass")
         alice_user = User.objects.create_user(username="dr_view_alice", first_name="Alice", last_name="View")
         bob_user = User.objects.create_user(username="dr_view_bob", first_name="Bob", last_name="View")
@@ -1709,16 +1758,22 @@ class DietaryRestrictionsViewTestCase(TestCase):
         cls.gabe = gabe_user.bandmember
         cls.gabe.dietary_restrictions = "Kosher"
         cls.gabe.save()
+        for member in (cls.alice, cls.bob, cls.finn, cls.gabe):
+            BandMembership.objects.create(band=cls.prsb, member=member)
         now = timezone.now()
-        cls.gig = Gig.objects.create(
-            name="Harvest Festival",
-            start_datetime=now + timedelta(days=5),
-            end_datetime=now + timedelta(days=5, hours=2),
+        cls.gig = _link_gig_to_prsb(
+            Gig.objects.create(
+                name="Harvest Festival",
+                start_datetime=now + timedelta(days=5),
+                end_datetime=now + timedelta(days=5, hours=2),
+            )
         )
-        cls.past_gig = Gig.objects.create(
-            name="Oak Tree Picnic",
-            start_datetime=now - timedelta(days=30),
-            end_datetime=now - timedelta(days=30) + timedelta(hours=2),
+        cls.past_gig = _link_gig_to_prsb(
+            Gig.objects.create(
+                name="Oak Tree Picnic",
+                start_datetime=now - timedelta(days=30),
+                end_datetime=now - timedelta(days=30) + timedelta(hours=2),
+            )
         )
         GigAttendance.objects.create(
             gig=cls.gig, member=cls.alice, status=GigAttendance.AVAILABLE,

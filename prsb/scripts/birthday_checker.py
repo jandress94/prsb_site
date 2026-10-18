@@ -13,7 +13,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from django.db import connections
 from prsb.settings import DEFAULT_FROM_EMAIL
-from band.models import BandMember, BandSpecialDate
+from band.models import Band, BandMember, BandSpecialDate
 
 BIRTHDAY_EMAIL_RECIPIENTS = [
     "jim.andress+prsb@gmail.com"
@@ -25,15 +25,39 @@ def lambda_handler(event, context):
 
     print("Today's date:", d)
 
-    results = [f"{m.user.get_full_name()}'s Birthday" for m in BandMember.objects.filter(birthday=d)]
-    results += [bsd.description for bsd in BandSpecialDate.objects.filter(date=d)]
+    sections = []
+    bands_with_results = []
 
-    if len(results) > 0:
-        result_formatted = '\n'.join(results)
+    for band in Band.objects.filter(is_active=True).order_by("name"):
+        lines = []
+        for member in (
+            BandMember.objects.filter(
+                birthday=d,
+                bandmembership__band=band,
+                bandmembership__is_active=True,
+            )
+            .select_related("user")
+            .order_by("user__first_name", "user__last_name")
+            .distinct()
+        ):
+            lines.append(f"{member.user.get_full_name()}'s Birthday")
+        for special in BandSpecialDate.objects.filter(band=band, date=d):
+            lines.append(special.description)
+        if lines:
+            bands_with_results.append(band)
+            sections.append("\n".join([band.name, *lines]))
+
+    if sections:
+        result_formatted = "\n\n".join(sections)
         print(result_formatted)
 
+        if len(bands_with_results) == 1:
+            subject = f"Special Day {d} {bands_with_results[0].name}"
+        else:
+            subject = f"Special Day {d}"
+
         send_mail(
-            f"PRSB Special Day {d}!",
+            subject,
             f"Today is a special day!\n\n{result_formatted}",
             DEFAULT_FROM_EMAIL,
             BIRTHDAY_EMAIL_RECIPIENTS,

@@ -4,7 +4,8 @@ import django
 
 django.setup()
 from band.models import (
-    BandMember, Gig, GigAttendance, Instrument, PartAssignment, PerformanceReadiness,
+    Band, BandMember, BandSong, Gig, GigAttendance, Instrument, PartAssignment,
+    PerformanceReadiness,
     Song, SongPart,
 )
 from django.utils import timezone
@@ -55,10 +56,10 @@ class CoverageRiskReport:
     songs: list  # list[SongRiskRow]; sorted risk desc
 
 
-def _lookback_gigs(lookback: int) -> list[Gig]:
+def _lookback_gigs(band: Band, lookback: int) -> list[Gig]:
     now = timezone.now()
     return list(
-        Gig.objects.filter(is_small_group=False, start_datetime__lte=now)
+        Gig.objects.filter(bands=band, is_small_group=False, start_datetime__lte=now)
         .order_by('-start_datetime')[:lookback]
     )
 
@@ -129,11 +130,16 @@ def _score_part(song_part: SongPart, assignments: list, rates: dict, d: int) -> 
     )
 
 
-def _active_members() -> list:
+def _active_members(band: Band) -> list:
     return list(
-        BandMember.objects.filter(user__is_active=True)
+        BandMember.objects.filter(
+            bandmembership__band=band,
+            bandmembership__is_active=True,
+            user__is_active=True,
+        )
         .select_related('user')
         .order_by('user__first_name', 'user__last_name')
+        .distinct()
     )
 
 
@@ -144,16 +150,22 @@ def _unassigned_members(active_members: list, assigned_member_ids: set) -> list:
     ]
 
 
-def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
-    gigs = _lookback_gigs(lookback)
+def get_coverage_risk(band: Band, lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
+    gigs = _lookback_gigs(band, lookback)
     d = len(gigs)
     rates = _attendance_rates(gigs)
 
+    rotation_song_ids = list(
+        BandSong.objects.filter(
+            band=band,
+            in_gig_rotation=True,
+            is_active=True,
+        ).values_list('song_id', flat=True)
+    )
+
     all_assignments = list(
         PartAssignment.objects.filter(
-            song_part__song__band_songs__band__slug="prsb",
-            song_part__song__band_songs__in_gig_rotation=True,
-            song_part__song__band_songs__is_active=True,
+            song_part__song_id__in=rotation_song_ids,
             member__user__is_active=True,
         )
         .exclude(performance_readiness=PerformanceReadiness.NOT_READY)
@@ -165,19 +177,13 @@ def get_coverage_risk(lookback: int = DEFAULT_LOOKBACK) -> CoverageRiskReport:
 
     assigned_member_ids_by_song = {}
     for assignment in PartAssignment.objects.filter(
-        song_part__song__band_songs__band__slug="prsb",
-        song_part__song__band_songs__in_gig_rotation=True,
-        song_part__song__band_songs__is_active=True,
+        song_part__song_id__in=rotation_song_ids,
     ).values_list('song_part__song_id', 'member_id'):
         song_id, member_id = assignment
         assigned_member_ids_by_song.setdefault(song_id, set()).add(member_id)
 
-    songs = Song.objects.filter(
-        band_songs__band__slug="prsb",
-        band_songs__in_gig_rotation=True,
-        band_songs__is_active=True,
-    ).distinct().prefetch_related('parts')
-    active_members = _active_members()
+    songs = Song.objects.filter(id__in=rotation_song_ids).prefetch_related('parts')
+    active_members = _active_members(band)
 
     song_rows = []
     for song in songs:

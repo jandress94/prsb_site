@@ -1203,7 +1203,7 @@ class CoverageRiskView(BandScopedMixin, generic.TemplateView):
         context = super().get_context_data(**kwargs)
         lookback = _parse_lookback(self.request)
         context["lookback"] = lookback
-        context["report"] = get_coverage_risk(lookback=lookback)
+        context["report"] = get_coverage_risk(self.band, lookback=lookback)
         return context
 
 
@@ -1212,7 +1212,7 @@ class DietaryRestrictionsView(BandScopedMixin, LoginRequiredMixin, generic.Templ
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        gig = resolve_gig(self.request.GET.get("gig"))
+        gig = resolve_gig(self.request.GET.get("gig"), band=self.band)
         statuses = resolve_statuses(
             gig=gig,
             status_key_present="status" in self.request.GET,
@@ -1222,9 +1222,11 @@ class DietaryRestrictionsView(BandScopedMixin, LoginRequiredMixin, generic.Templ
         context["statuses"] = statuses or []
         context["status_labels"] = status_caption_labels(context["statuses"])
         context["status_fieldset_enabled"] = gig is not None
-        context["members"] = dietary_restriction_members(gig=gig, statuses=statuses)
-        context["upcoming_gig_rows"] = gig_picker_rows(upcoming_gigs())
-        context["past_gig_rows"] = gig_picker_rows(past_gigs())
+        context["members"] = dietary_restriction_members(
+            gig=gig, statuses=statuses, band=self.band,
+        )
+        context["upcoming_gig_rows"] = gig_picker_rows(upcoming_gigs(self.band))
+        context["past_gig_rows"] = gig_picker_rows(past_gigs(self.band))
         return context
 
 
