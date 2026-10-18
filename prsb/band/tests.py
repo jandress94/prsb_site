@@ -125,6 +125,9 @@ class SoloAwareAssignmentTestCase(TestCase):
         cls.alice = User.objects.create_user(username="solo_opt_alice", first_name="Alice", last_name="A")
         cls.bob = User.objects.create_user(username="solo_opt_bob", first_name="Bob", last_name="B")
         cls.carol = User.objects.create_user(username="solo_opt_carol", first_name="Carol", last_name="C")
+        prsb = Band.objects.get(slug="prsb")
+        for user in (cls.alice, cls.bob, cls.carol):
+            BandMembership.objects.create(band=prsb, member=user.bandmember)
 
     def _gig_with_instruments(self, instruments_and_qty):
         gig = Gig.objects.create(
@@ -132,6 +135,7 @@ class SoloAwareAssignmentTestCase(TestCase):
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
         )
+        _link_gig_to_prsb(gig)
         for instrument, qty in instruments_and_qty:
             GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=qty)
         for member in BandMember.objects.filter(user__username__startswith="solo_opt_"):
@@ -339,6 +343,7 @@ class GigPartAssignmentSoloMarkerTestCase(TestCase):
     def setUpTestData(cls):
         cls.trumpet = Instrument.objects.create(name="Trumpet Marker", quantity=1, order=0)
         cls.alice = User.objects.create_user(username="solo_marker_alice", first_name="Alice", last_name="M")
+        BandMembership.objects.create(band=Band.objects.get(slug="prsb"), member=cls.alice.bandmember)
         cls.song = Song.objects.create(title="Solo Marker Song")
         BandSong.objects.create(
             band=Band.objects.get(slug="prsb"),
@@ -429,6 +434,9 @@ class GigRecommendationGroupingTestCase(TestCase):
 
         cls.alice = User.objects.create_user(username="group_alice", first_name="Alice", last_name="Smith")
         cls.bob = User.objects.create_user(username="group_bob", first_name="Bob", last_name="Jones")
+        prsb = Band.objects.get(slug="prsb")
+        for user in (cls.alice, cls.bob):
+            BandMembership.objects.create(band=prsb, member=user.bandmember)
 
         cls.gig = Gig.objects.create(
             name="Grouping Gig",
@@ -664,6 +672,9 @@ class PartAssignmentOrderingTestCase(TestCase):
         cls.bob = User.objects.create_user(username="ord_bob", first_name="Bob", last_name="B")
         cls.carol = User.objects.create_user(username="ord_carol", first_name="Carol", last_name="C")
         cls.zed = User.objects.create_user(username="ord_zed", first_name="Zed", last_name="Z")
+        prsb = Band.objects.get(slug="prsb")
+        for user in (cls.alice, cls.bob, cls.carol, cls.zed):
+            BandMembership.objects.create(band=prsb, member=user.bandmember)
 
     def test_rows_sorted_by_part_then_instrument_then_name(self):
         song = Song.objects.create(title="Ordering Song")
@@ -685,6 +696,7 @@ class PartAssignmentOrderingTestCase(TestCase):
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
         )
+        _link_gig_to_prsb(gig)
         GigInstrument.objects.create(gig=gig, instrument=self.low, gig_quantity=2)
         GigInstrument.objects.create(gig=gig, instrument=self.high, gig_quantity=2)
         for member in BandMember.objects.filter(user__username__startswith="ord_"):
@@ -1404,7 +1416,6 @@ class DrumKitCoverInjectionTestCase(TestCase):
 class DrumKitCoverGigAssignmentTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.band = Band.objects.create(name="Kit Gig Band", slug="kit-gig-band")
         cls.song = Song.objects.create(title="Kit Gig Song")
         BandSong.objects.create(
             band=Band.objects.get(slug="prsb"),
@@ -1438,8 +1449,11 @@ class DrumKitCoverGigAssignmentTestCase(TestCase):
             performance_readiness=PerformanceReadiness.READY,
         )
 
-        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.jansen.bandmember, priority=1)
-        DrumKitCoverPlayer.objects.create(band=cls.band, member=cls.carlos.bandmember, priority=2)
+        prsb = Band.objects.get(slug="prsb")
+        for user in (cls.ben, cls.jansen, cls.carlos, cls.lead_player):
+            BandMembership.objects.create(band=prsb, member=user.bandmember)
+        DrumKitCoverPlayer.objects.create(band=prsb, member=cls.jansen.bandmember, priority=1)
+        DrumKitCoverPlayer.objects.create(band=prsb, member=cls.carlos.bandmember, priority=2)
 
         cls.gig = Gig.objects.create(
             name="Kit Gig",
@@ -2176,4 +2190,283 @@ class BandSongRotationTestCase(TestCase):
         self.assertTrue(song.band_songs.get(band=first).in_gig_rotation)
         self.assertFalse(song.band_songs.get(band=second).in_gig_rotation)
         self.assertNotIn("in_gig_rotation", {field.name for field in Song._meta.fields})
+
+
+class MultiBandSolverTestCase(TestCase):
+    _n = 0
+
+    def _next_id(self):
+        MultiBandSolverTestCase._n += 1
+        return MultiBandSolverTestCase._n
+
+    def _gig(self, n, bands):
+        gig = Gig.objects.create(
+            name=f"Solver gig {n}",
+            start_datetime=timezone.now(),
+            end_datetime=timezone.now() + timedelta(hours=2),
+        )
+        gig.bands.set(bands)
+        return gig
+
+    def scenario(self, mode="only", preferred_knows_part=True):
+        n = self._next_id()
+        preferred_band = Band.objects.create(name=f"Solver Preferred {n}", slug=f"solver-preferred-{n}")
+        other_band = Band.objects.create(name=f"Solver Other {n}", slug=f"solver-other-{n}")
+        gig = self._gig(n, [preferred_band, other_band])
+        instrument = Instrument.objects.create(name=f"Solver Horn {n}", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=1)
+
+        song = Song.objects.create(title=f"Solver Song {n}")
+        for band in (preferred_band, other_band):
+            BandSong.objects.create(band=band, song=song, is_active=True, in_gig_rotation=True)
+        part = SongPart.objects.create(song=song, name="Lead")
+
+        preferred_user = User.objects.create_user(
+            username=f"solver_pref_{n}", first_name="Pref", last_name=f"P{n}",
+        )
+        other_user = User.objects.create_user(
+            username=f"solver_other_{n}", first_name="Other", last_name=f"O{n}",
+        )
+        preferred = preferred_user.bandmember
+        other = other_user.bandmember
+        BandMembership.objects.create(band=preferred_band, member=preferred)
+        BandMembership.objects.create(band=other_band, member=other)
+        for member in (preferred, other):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        if preferred_knows_part:
+            PartAssignment.objects.create(
+                member=preferred, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+        PartAssignment.objects.create(
+            member=other, song_part=part, instrument=instrument,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        entry = GigSetlistEntry.objects.create(
+            gig=gig,
+            song=song,
+            staffing_mode=mode,
+            staffing_band=None if mode == "any" else preferred_band,
+        )
+        return gig, entry, preferred, other
+
+    def test_only_never_assigns_the_other_band(self):
+        gig, entry, preferred, other = self.scenario(mode="only")
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        members = {row.member for row in setlist[0].part_assignments}
+        self.assertIn(preferred, members)
+        self.assertNotIn(other, members)
+
+    def test_prefer_fills_a_hole_with_the_other_band(self):
+        gig, entry, preferred, other = self.scenario(mode="prefer", preferred_knows_part=False)
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].part_assignments[0].member, other)
+
+    def test_prefer_keeps_preferred_player_when_both_cover(self):
+        gig, entry, preferred, other = self.scenario(mode="prefer", preferred_knows_part=True)
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].part_assignments[0].member, preferred)
+
+    def test_dual_member_counts_as_preferred(self):
+        gig, entry, preferred, other = self.scenario(mode="prefer", preferred_knows_part=True)
+        BandMembership.objects.create(band=entry.staffing_band, member=other)
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].part_assignments[0].member, preferred)
+
+    def test_any_may_use_either_roster(self):
+        gig, entry, preferred, other = self.scenario(mode="any", preferred_knows_part=False)
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].part_assignments[0].member, other)
+
+    def test_only_entries_are_solved_before_prefer(self):
+        # Equal candidate counts and a Prefer title that sorts first. A title
+        # sort solves Prefer first and keeps the shared player; Only-first
+        # order spends that player and leaves Prefer the alternate.
+        n = self._next_id()
+        band_a = Band.objects.create(name=f"Order A {n}", slug=f"order-a-{n}")
+        band_b = Band.objects.create(name=f"Order B {n}", slug=f"order-b-{n}")
+        gig = self._gig(n, [band_a, band_b])
+        instrument = Instrument.objects.create(name=f"Order Horn {n}", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=1)
+
+        shared_user = User.objects.create_user(username=f"order_shared_{n}", first_name="Shared", last_name=f"S{n}")
+        extra_user = User.objects.create_user(username=f"order_extra_{n}", first_name="Extra", last_name=f"E{n}")
+        alternate_user = User.objects.create_user(
+            username=f"order_alt_{n}", first_name="Alternate", last_name=f"N{n}",
+        )
+        shared = shared_user.bandmember
+        extra = extra_user.bandmember
+        alternate = alternate_user.bandmember
+        for member in (shared, extra, alternate):
+            BandMembership.objects.create(band=band_a, member=member)
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+
+        def song_with_parts(title, ready_members, backup_members):
+            song = Song.objects.create(title=title)
+            BandSong.objects.create(band=band_a, song=song, is_active=True, in_gig_rotation=True)
+            BandSong.objects.create(band=band_b, song=song, is_active=True, in_gig_rotation=True)
+            part = SongPart.objects.create(song=song, name="Lead")
+            for member in ready_members:
+                PartAssignment.objects.create(
+                    member=member, song_part=part, instrument=instrument,
+                    performance_readiness=PerformanceReadiness.READY,
+                )
+            for member in backup_members:
+                PartAssignment.objects.create(
+                    member=member, song_part=part, instrument=instrument,
+                    performance_readiness=PerformanceReadiness.BACKUP,
+                )
+            return song
+
+        wide = song_with_parts("M Only Wide", [shared], [extra])
+        prefer = song_with_parts("A Prefer Song", [shared, alternate], [])
+        scarce = song_with_parts("Z Only Scarce", [shared], [extra])
+        GigSetlistEntry.objects.create(gig=gig, song=wide, staffing_mode="only", staffing_band=band_a)
+        GigSetlistEntry.objects.create(
+            gig=gig, song=prefer, staffing_mode="prefer", staffing_band=band_b,
+        )
+        GigSetlistEntry.objects.create(gig=gig, song=scarce, staffing_mode="only", staffing_band=band_a)
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        by_title = {row.song.title: row.part_assignments[0].member for row in setlist}
+        self.assertEqual(by_title["M Only Wide"], shared)
+        self.assertEqual(by_title["Z Only Scarce"], shared)
+        self.assertEqual(by_title["A Prefer Song"], alternate)
+
+    def test_same_song_on_two_entries_assigns_each_band(self):
+        n = self._next_id()
+        band_a = Band.objects.create(name=f"Split A {n}", slug=f"split-a-{n}")
+        band_b = Band.objects.create(name=f"Split B {n}", slug=f"split-b-{n}")
+        gig = self._gig(n, [band_a, band_b])
+        instrument = Instrument.objects.create(name=f"Split Horn {n}", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=1)
+        song = Song.objects.create(title=f"Split Song {n}")
+        for band in (band_a, band_b):
+            BandSong.objects.create(band=band, song=song, is_active=True, in_gig_rotation=True)
+        part = SongPart.objects.create(song=song, name="Lead")
+
+        user_a = User.objects.create_user(username=f"split_a_{n}", first_name="Ada", last_name=f"A{n}")
+        user_b = User.objects.create_user(username=f"split_b_{n}", first_name="Bea", last_name=f"B{n}")
+        member_a = user_a.bandmember
+        member_b = user_b.bandmember
+        BandMembership.objects.create(band=band_a, member=member_a)
+        BandMembership.objects.create(band=band_b, member=member_b)
+        for member in (member_a, member_b):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+            PartAssignment.objects.create(
+                member=member, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+        entry_a = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=band_a,
+        )
+        entry_b = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=band_b,
+        )
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(
+            [(row.setlist_entry, row.part_assignments[0].member) for row in setlist],
+            [(entry_a, member_a), (entry_b, member_b)],
+        )
+
+    def test_inactive_membership_still_assigned_for_only(self):
+        gig, entry, preferred, other = self.scenario(mode="only")
+        BandMembership.objects.filter(band=entry.staffing_band, member=preferred).update(is_active=False)
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].part_assignments[0].member, preferred)
+
+    def test_out_of_rotation_setlist_song_and_band_recommendations(self):
+        n = self._next_id()
+        band_a = Band.objects.create(name=f"Rec A {n}", slug=f"rec-a-{n}")
+        band_b = Band.objects.create(name=f"Rec B {n}", slug=f"rec-b-{n}")
+        outsider = Band.objects.create(name=f"Rec Out {n}", slug=f"rec-out-{n}")
+        gig = self._gig(n, [band_a, band_b])
+        instrument = Instrument.objects.create(name=f"Rec Horn {n}", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=1)
+
+        user_a = User.objects.create_user(username=f"rec_a_{n}", first_name="Rec", last_name=f"A{n}")
+        user_b = User.objects.create_user(username=f"rec_b_{n}", first_name="Rec", last_name=f"B{n}")
+        player_a = user_a.bandmember
+        player_b = user_b.bandmember
+        BandMembership.objects.create(band=band_a, member=player_a)
+        BandMembership.objects.create(band=band_b, member=player_b)
+        for member in (player_a, player_b):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+
+        def make_song(title, band, player, in_rotation, active=True):
+            song = Song.objects.create(title=title)
+            BandSong.objects.create(
+                band=band, song=song, is_active=active, in_gig_rotation=in_rotation,
+            )
+            part = SongPart.objects.create(song=song, name="Lead")
+            PartAssignment.objects.create(
+                member=player, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+            return song
+
+        out_of_rotation = make_song("Setlist Out", band_a, player_a, in_rotation=False)
+        on_setlist = make_song("Setlist In", band_a, player_a, in_rotation=True)
+        rec_a = make_song("Rec Band A", band_a, player_a, in_rotation=True)
+        rec_b = make_song("Rec Band B", band_b, player_b, in_rotation=True)
+        make_song("Inactive Rotation", band_a, player_a, in_rotation=True, active=False)
+        make_song("Outsider Rotation", outsider, player_a, in_rotation=True)
+        GigSetlistEntry.objects.create(
+            gig=gig, song=out_of_rotation, staffing_mode="only", staffing_band=band_a,
+        )
+        GigSetlistEntry.objects.create(
+            gig=gig, song=on_setlist, staffing_mode="only", staffing_band=band_a,
+        )
+
+        setlist, recs, _ = get_gig_part_assignments(gig, [])
+        by_title = {row.song.title: row for row in setlist}
+        self.assertEqual(set(by_title), {"Setlist Out", "Setlist In"})
+        self.assertEqual(by_title["Setlist Out"].part_assignments[0].member, player_a)
+        self.assertEqual({row.song for row in recs}, {rec_a, rec_b})
+
+    def _drum_cover_gig(self, mode):
+        n = self._next_id()
+        band_a = Band.objects.create(name=f"Kit A {n}", slug=f"kit-a-{n}")
+        band_b = Band.objects.create(name=f"Kit B {n}", slug=f"kit-b-{n}")
+        gig = self._gig(n, [band_a, band_b])
+        kit = Instrument.objects.create(
+            name=f"Kit Drum {n}", quantity=1, order=0, is_drum_kit_cover_instrument=True,
+        )
+        GigInstrument.objects.create(gig=gig, instrument=kit, gig_quantity=1)
+        song = Song.objects.create(title=f"Kit Song {n}")
+        BandSong.objects.create(band=band_a, song=song, is_active=True, in_gig_rotation=True)
+        engine = SongPart.objects.create(song=song, name="Engine")
+
+        listed_user = User.objects.create_user(username=f"kit_listed_{n}", first_name="Listed", last_name=f"L{n}")
+        cover_user = User.objects.create_user(username=f"kit_cover_{n}", first_name="Cover", last_name=f"C{n}")
+        listed = listed_user.bandmember
+        cover = cover_user.bandmember
+        BandMembership.objects.create(band=band_a, member=listed)
+        BandMembership.objects.create(band=band_b, member=cover)
+        GigAttendance.objects.create(gig=gig, member=listed, status=GigAttendance.UNAVAILABLE)
+        GigAttendance.objects.create(gig=gig, member=cover, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=listed, song_part=engine, instrument=kit,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        DrumKitCoverPlayer.objects.create(band=band_b, member=cover, priority=1)
+        entry = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode=mode, staffing_band=band_a,
+        )
+        return gig, entry, cover, engine
+
+    def test_only_ignores_the_other_bands_drum_cover(self):
+        gig, entry, cover, engine = self._drum_cover_gig("only")
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        self.assertNotIn(cover, {row.member for row in setlist[0].part_assignments})
+        self.assertEqual(setlist[0].unplayed_parts, [engine])
+
+    def test_prefer_uses_another_bands_drum_cover(self):
+        gig, entry, cover, engine = self._drum_cover_gig("prefer")
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        self.assertEqual(setlist[0].part_assignments[0].member, cover)
+        self.assertTrue(setlist[0].part_assignments[0].is_drum_kit_cover)
 
