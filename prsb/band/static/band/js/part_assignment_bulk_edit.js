@@ -95,6 +95,31 @@
                 renderChips();
                 renderMenu();
             }
+            if (event.key === "Enter") {
+                event.preventDefault();
+                if (menu.hidden) {
+                    return;
+                }
+                const firstButton = menu.querySelector("li button");
+                if (!firstButton) {
+                    return;
+                }
+                const member = members.find(function (item) {
+                    return item.name === firstButton.textContent;
+                });
+                if (!member) {
+                    return;
+                }
+                const id = String(member.id);
+                if (selected.indexOf(id) !== -1) {
+                    return;
+                }
+                selected.push(id);
+                input.value = "";
+                renderChips();
+                renderMenu();
+                input.focus();
+            }
         });
         document.addEventListener("click", function (event) {
             if (!picker.contains(event.target)) {
