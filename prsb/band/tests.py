@@ -3,6 +3,7 @@ import re
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.http import QueryDict
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError, connection, transaction
@@ -2893,4 +2894,326 @@ class MultiBandSolverTestCase(TestCase):
         rows = by_member.context["member_assignments"][0][1]
         entries = list(GigSetlistEntry.objects.filter(gig=gig).order_by("_order"))
         self.assertEqual([row[0] for row in rows], [entry._order + 1 for entry in entries])
+
+
+class BulkEditPartAssignmentTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.band = Band.objects.get(slug="prsb")
+        cls.other_band = Band.objects.create(name="Other Bulk Band", slug="other-bulk-band")
+        cls.song = Song.objects.create(title="Bulk Edit Song")
+        BandSong.objects.create(band=cls.band, song=cls.song, in_gig_rotation=True)
+        cls.lead = SongPart.objects.create(song=cls.song, name="Bulk Lead", has_solo=True)
+        cls.pad = SongPart.objects.create(song=cls.song, name="Bulk Pad", has_solo=False)
+        cls.other_song = Song.objects.create(title="Bulk Other Song")
+        cls.foreign_part = SongPart.objects.create(song=cls.other_song, name="Foreign Part")
+        cls.trumpet = Instrument.objects.create(name="Bulk Trumpet", order=10)
+        cls.trombone = Instrument.objects.create(name="Bulk Trombone", order=11)
+        cls.ada = User.objects.create_user(username="bulk_ada", first_name="Ada", last_name="Alpha")
+        cls.bea = User.objects.create_user(username="bulk_bea", first_name="Bea", last_name="Beta")
+        cls.cy = User.objects.create_user(username="bulk_cy", first_name="Cy", last_name="Inactive")
+        cls.dee = User.objects.create_user(username="bulk_dee", first_name="Dee", last_name="Other")
+        BandMembership.objects.create(band=cls.band, member=cls.ada.bandmember, is_active=True)
+        BandMembership.objects.create(band=cls.band, member=cls.bea.bandmember, is_active=True)
+        BandMembership.objects.create(band=cls.band, member=cls.cy.bandmember, is_active=False)
+        BandMembership.objects.create(band=cls.other_band, member=cls.dee.bandmember, is_active=True)
+
+    def _assign(self, user, part, instrument, readiness=PerformanceReadiness.READY, can_solo=False):
+        return PartAssignment.objects.create(
+            member=user.bandmember,
+            song_part=part,
+            instrument=instrument,
+            performance_readiness=readiness,
+            can_solo=can_solo,
+        )
+
+    def _post(self, **fields):
+        data = QueryDict(mutable=True)
+        for key, value in fields.items():
+            if isinstance(value, list):
+                data.setlist(key, [str(item) for item in value])
+            else:
+                data[key] = "" if value is None else str(value)
+        return data
+
+    def _apply(self, data):
+        from band.part_assignment_bulk import apply_bulk_part_assignments, parse_posted_rows
+        return apply_bulk_part_assignments(self.song, self.band, parse_posted_rows(data))
+
+    def _snapshot(self):
+        return set(
+            PartAssignment.objects.filter(song_part__song=self.song).values_list(
+                "member_id", "song_part_id", "instrument_id", "performance_readiness", "can_solo",
+            )
+        )
+
+    def test_new_chip_creates_ready_no_solo(self):
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk],
+        }))
+        self.assertEqual(errors, [])
+        assignment = PartAssignment.objects.get(
+            member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet,
+        )
+        self.assertEqual(assignment.performance_readiness, PerformanceReadiness.READY)
+        self.assertFalse(assignment.can_solo)
+
+    def test_member_added_to_existing_row_is_ready_and_not_solo(self):
+        self._assign(self.ada, self.lead, self.trumpet, PerformanceReadiness.BACKUP, can_solo=True)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [self.ada.bandmember.pk, self.bea.bandmember.pk],
+            "new-TOTAL": 0,
+        }))
+        self.assertEqual(errors, [])
+        ada = PartAssignment.objects.get(member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet)
+        self.assertEqual(ada.performance_readiness, PerformanceReadiness.BACKUP)
+        self.assertTrue(ada.can_solo)
+        bea = PartAssignment.objects.get(member=self.bea.bandmember, song_part=self.lead, instrument=self.trumpet)
+        self.assertEqual(bea.performance_readiness, PerformanceReadiness.READY)
+        self.assertFalse(bea.can_solo)
+
+    def test_kept_chip_preserves_readiness_and_solo(self):
+        self._assign(self.ada, self.lead, self.trumpet, PerformanceReadiness.BACKUP, can_solo=True)
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [self.ada.bandmember.pk],
+            "new-TOTAL": 0,
+        }))
+        self.assertEqual(errors, [])
+        self.assertEqual(self._snapshot(), before)
+
+    def test_removed_chip_deletes_assignment(self):
+        self._assign(self.ada, self.lead, self.trumpet, PerformanceReadiness.BACKUP, can_solo=True)
+        self._assign(self.bea, self.lead, self.trumpet)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [self.ada.bandmember.pk],
+            "new-TOTAL": 0,
+        }))
+        self.assertEqual(errors, [])
+        self.assertFalse(PartAssignment.objects.filter(member=self.bea.bandmember, song_part=self.lead).exists())
+        kept = PartAssignment.objects.get(member=self.ada.bandmember, song_part=self.lead)
+        self.assertEqual(kept.performance_readiness, PerformanceReadiness.BACKUP)
+        self.assertTrue(kept.can_solo)
+
+    def test_clearing_chips_deletes_this_bands_assignments(self):
+        self._assign(self.ada, self.lead, self.trumpet)
+        self._assign(self.bea, self.lead, self.trumpet)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [],
+            "new-TOTAL": 0,
+        }))
+        self.assertEqual(errors, [])
+        self.assertFalse(
+            PartAssignment.objects.filter(song_part=self.lead, instrument=self.trumpet, member__in=[self.ada.bandmember, self.bea.bandmember]).exists()
+        )
+
+    def test_other_band_member_is_not_deleted(self):
+        self._assign(self.ada, self.lead, self.trumpet)
+        self._assign(self.dee, self.lead, self.trumpet)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [],
+            "new-TOTAL": 0,
+        }))
+        self.assertEqual(errors, [])
+        self.assertFalse(PartAssignment.objects.filter(member=self.ada.bandmember, song_part=self.lead).exists())
+        self.assertTrue(PartAssignment.objects.filter(member=self.dee.bandmember, song_part=self.lead, instrument=self.trumpet).exists())
+
+    def test_inactive_member_assignment_is_not_deleted(self):
+        self._assign(self.ada, self.lead, self.trumpet)
+        self._assign(self.cy, self.lead, self.trumpet)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [],
+            "new-TOTAL": 0,
+        }))
+        self.assertEqual(errors, [])
+        self.assertTrue(PartAssignment.objects.filter(member=self.cy.bandmember, song_part=self.lead, instrument=self.trumpet).exists())
+        self.assertFalse(PartAssignment.objects.filter(member=self.ada.bandmember, song_part=self.lead).exists())
+
+    def test_duplicate_instrument_on_a_part_rejects_save(self):
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 2,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk],
+            "new-1-part": self.lead.pk,
+            "new-1-instrument": self.trumpet.pk,
+            "new-1-members": [self.bea.bandmember.pk],
+        }))
+        self.assertIn("Each instrument can only appear once on a part.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_new_row_cannot_reuse_an_existing_instrument(self):
+        self._assign(self.ada, self.lead, self.trumpet)
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trumpet.pk,
+            "existing-0-members": [],
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.bea.bandmember.pk],
+        }))
+        self.assertIn("Each instrument can only appear once on a part.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_new_row_with_members_and_no_instrument_rejects_save(self):
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": "",
+            "new-0-members": [self.ada.bandmember.pk],
+        }))
+        self.assertIn("Choose an instrument for each new row that has members.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_member_not_in_band_rejects_save(self):
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.dee.bandmember.pk],
+        }))
+        self.assertIn("A selected member is not in this band.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_part_from_another_song_rejects_save(self):
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.foreign_part.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk],
+        }))
+        self.assertIn("A part on this form is not on this song.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_unknown_instrument_rejects_save(self):
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": 999999,
+            "new-0-members": [self.ada.bandmember.pk],
+        }))
+        self.assertIn("Choose a real instrument.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_unknown_existing_row_rejects_save(self):
+        before = self._snapshot()
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 1,
+            "existing-0-part": self.lead.pk,
+            "existing-0-instrument": self.trombone.pk,
+            "existing-0-members": [self.ada.bandmember.pk],
+            "new-TOTAL": 0,
+        }))
+        self.assertIn("That part and instrument is not an existing row for this band.", errors)
+        self.assertEqual(self._snapshot(), before)
+
+    def test_duplicate_member_on_one_row_creates_one_assignment(self):
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk, self.ada.bandmember.pk],
+        }))
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            PartAssignment.objects.filter(member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet).count(),
+            1,
+        )
+
+    def test_empty_new_row_is_ignored(self):
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 2,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [],
+            "new-1-part": self.lead.pk,
+            "new-1-instrument": self.trombone.pk,
+            "new-1-members": [self.ada.bandmember.pk],
+        }))
+        self.assertEqual(errors, [])
+        self.assertFalse(PartAssignment.objects.filter(song_part=self.lead, instrument=self.trumpet).exists())
+        assignment = PartAssignment.objects.get(member=self.ada.bandmember, song_part=self.lead, instrument=self.trombone)
+        self.assertEqual(assignment.performance_readiness, PerformanceReadiness.READY)
+        self.assertFalse(assignment.can_solo)
+
+    def test_new_row_skips_member_already_assigned(self):
+        self._assign(self.ada, self.lead, self.trumpet, PerformanceReadiness.BACKUP, can_solo=True)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk, self.bea.bandmember.pk],
+        }))
+        self.assertEqual(errors, [])
+        ada = PartAssignment.objects.get(member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet)
+        self.assertEqual(ada.performance_readiness, PerformanceReadiness.BACKUP)
+        self.assertTrue(ada.can_solo)
+        bea = PartAssignment.objects.get(member=self.bea.bandmember, song_part=self.lead, instrument=self.trumpet)
+        self.assertEqual(bea.performance_readiness, PerformanceReadiness.READY)
+        self.assertFalse(bea.can_solo)
+
+    def test_same_member_can_be_on_two_instruments(self):
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 2,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk],
+            "new-1-part": self.lead.pk,
+            "new-1-instrument": self.trombone.pk,
+            "new-1-members": [self.ada.bandmember.pk],
+        }))
+        self.assertEqual(errors, [])
+        self.assertEqual(PartAssignment.objects.filter(member=self.ada.bandmember, song_part=self.lead).count(), 2)
+
+    def test_new_row_can_use_instrument_held_only_outside_this_band(self):
+        self._assign(self.dee, self.lead, self.trumpet)
+        errors = self._apply(self._post(**{
+            "existing-TOTAL": 0,
+            "new-TOTAL": 1,
+            "new-0-part": self.lead.pk,
+            "new-0-instrument": self.trumpet.pk,
+            "new-0-members": [self.ada.bandmember.pk],
+        }))
+        self.assertEqual(errors, [])
+        self.assertTrue(PartAssignment.objects.filter(member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet).exists())
+        self.assertTrue(PartAssignment.objects.filter(member=self.dee.bandmember, song_part=self.lead, instrument=self.trumpet).exists())
 
