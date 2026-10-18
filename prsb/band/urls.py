@@ -45,6 +45,11 @@ urlpatterns = [
         views.SongPartAssignmentUpdateView.as_view(),
         name="song_part_assignment_update",
     ),
+    path(
+        "bands/<slug:slug>/songs/<int:song_id>/part-assignments/bulk-edit/",
+        views.SongPartAssignmentBulkEditView.as_view(),
+        name="song_part_assignment_bulk_edit",
+    ),
 
     path("bands/<slug:slug>/gigs/", views.GigListView.as_view(), name="gig_list"),
     path("bands/<slug:slug>/gigs/create/", views.GigCreateView.as_view(), name="gig_create"),

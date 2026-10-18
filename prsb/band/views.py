@@ -29,6 +29,7 @@ from .dietary_restrictions import (
 from .linking import link_member, link_song
 from .models import Band, BandMembership, BandSong, Song, Gig, GigAttendance, BandMember, PartAssignment, \
     Instrument, SongPart, GigPartAssignmentOverride, GigInstrument, GigSetlistEntry, OverrideType, PerformanceReadiness
+from .part_assignment_bulk import apply_bulk_part_assignments, bulk_edit_page, parse_posted_rows
 from .scoping import active_bands, get_band, get_gig_for_band
 from .validation import entry_pool_member_ids, validate_entry_change, validate_gig_bands
 
@@ -437,6 +438,32 @@ class SongPartAssignmentUpdateView(BandScopedMixin, generic.UpdateView):
             "band:song_detail",
             kwargs={"slug": self.band.slug, "pk": self.kwargs["song_id"]},
         )
+
+
+class SongPartAssignmentBulkEditView(BandScopedMixin, generic.View):
+    template_name = "band/partassignment_bulk_edit.html"
+
+    def _song(self):
+        return get_object_or_404(Song, pk=self.kwargs["song_id"])
+
+    def _context(self, song, errors, rows):
+        return self.band_context(
+            song=song,
+            errors=errors or [],
+            **bulk_edit_page(song, self.band, rows),
+        )
+
+    def get(self, request, slug, song_id):
+        song = self._song()
+        return render(request, self.template_name, self._context(song, errors=None, rows=None))
+
+    def post(self, request, slug, song_id):
+        song = self._song()
+        rows = parse_posted_rows(request.POST)
+        errors = apply_bulk_part_assignments(song, self.band, rows)
+        if errors:
+            return render(request, self.template_name, self._context(song, errors=errors, rows=rows))
+        return redirect("band:song_detail", slug=self.band.slug, pk=song.pk)
 
 
 class GigListView(BandScopedMixin, generic.ListView):

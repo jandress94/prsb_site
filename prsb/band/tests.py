@@ -3217,3 +3217,94 @@ class BulkEditPartAssignmentTestCase(TestCase):
         self.assertTrue(PartAssignment.objects.filter(member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet).exists())
         self.assertTrue(PartAssignment.objects.filter(member=self.dee.bandmember, song_part=self.lead, instrument=self.trumpet).exists())
 
+
+class BulkEditPartAssignmentViewTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.band = Band.objects.get(slug="prsb")
+        cls.song = Song.objects.create(title="Bulk Edit Page Song")
+        BandSong.objects.create(band=cls.band, song=cls.song, in_gig_rotation=True)
+        cls.lead = SongPart.objects.create(song=cls.song, name="Page Lead", has_solo=True)
+        cls.pad = SongPart.objects.create(song=cls.song, name="Page Pad", has_solo=False)
+        cls.trumpet = Instrument.objects.create(name="Page Trumpet", order=20)
+        cls.trombone = Instrument.objects.create(name="Page Trombone", order=21)
+        cls.ada = User.objects.create_user(username="bulk_page_ada", first_name="Ada", last_name="Page")
+        cls.bea = User.objects.create_user(username="bulk_page_bea", first_name="Bea", last_name="Page")
+        BandMembership.objects.create(band=cls.band, member=cls.ada.bandmember, is_active=True)
+        BandMembership.objects.create(band=cls.band, member=cls.bea.bandmember, is_active=True)
+        PartAssignment.objects.create(
+            member=cls.ada.bandmember,
+            song_part=cls.lead,
+            instrument=cls.trumpet,
+            performance_readiness=PerformanceReadiness.BACKUP,
+            can_solo=True,
+        )
+
+    def setUp(self):
+        self.url = reverse(
+            "band:song_part_assignment_bulk_edit",
+            kwargs={"slug": "prsb", "song_id": self.song.pk},
+        )
+
+    def test_song_detail_links_to_bulk_edit(self):
+        detail = self.client.get(reverse("band:song_detail", kwargs={"slug": "prsb", "pk": self.song.pk}))
+        self.assertContains(detail, "Bulk Edit Part Assignments")
+        self.assertContains(detail, self.url)
+
+    def test_get_renders_every_part_and_existing_assignment(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertLess(body.index("Page Lead"), body.index("Page Pad"))
+        self.assertContains(response, "Page Trumpet")
+        self.assertContains(response, "Ada Page")
+        self.assertContains(response, "Add row")
+        self.assertNotContains(response, "Backup")
+        self.assertNotContains(response, "solo")
+        self.assertContains(response, 'name="existing-TOTAL"')
+        self.assertContains(response, f'name="existing-0-members" value="{self.ada.bandmember.pk}"')
+
+    def test_post_creates_and_redirects(self):
+        response = self.client.post(self.url, {
+            "existing-TOTAL": "1",
+            "existing-0-part": str(self.lead.pk),
+            "existing-0-instrument": str(self.trumpet.pk),
+            "existing-0-members": str(self.ada.bandmember.pk),
+            "new-TOTAL": "1",
+            "new-0-part": str(self.pad.pk),
+            "new-0-instrument": str(self.trombone.pk),
+            "new-0-members": str(self.bea.bandmember.pk),
+        })
+        self.assertRedirects(response, reverse("band:song_detail", kwargs={"slug": "prsb", "pk": self.song.pk}))
+        created = PartAssignment.objects.get(member=self.bea.bandmember, song_part=self.pad, instrument=self.trombone)
+        self.assertEqual(created.performance_readiness, PerformanceReadiness.READY)
+        self.assertFalse(created.can_solo)
+        kept = PartAssignment.objects.get(member=self.ada.bandmember, song_part=self.lead, instrument=self.trumpet)
+        self.assertEqual(kept.performance_readiness, PerformanceReadiness.BACKUP)
+        self.assertTrue(kept.can_solo)
+
+    def test_rejected_post_redisplays_chips_and_writes_nothing(self):
+        before = set(PartAssignment.objects.values_list(
+            "member_id", "song_part_id", "instrument_id", "performance_readiness", "can_solo",
+        ))
+        response = self.client.post(self.url, {
+            "existing-TOTAL": "1",
+            "existing-0-part": str(self.lead.pk),
+            "existing-0-instrument": str(self.trumpet.pk),
+            "existing-0-members": str(self.ada.bandmember.pk),
+            "new-TOTAL": "2",
+            "new-0-part": str(self.pad.pk),
+            "new-0-instrument": str(self.trombone.pk),
+            "new-0-members": str(self.ada.bandmember.pk),
+            "new-1-part": str(self.pad.pk),
+            "new-1-instrument": str(self.trombone.pk),
+            "new-1-members": str(self.bea.bandmember.pk),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Each instrument can only appear once on a part.")
+        self.assertContains(response, "Ada Page")
+        self.assertContains(response, "Bea Page")
+        self.assertEqual(before, set(PartAssignment.objects.values_list(
+            "member_id", "song_part_id", "instrument_id", "performance_readiness", "can_solo",
+        )))
+
