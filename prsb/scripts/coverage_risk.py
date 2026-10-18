@@ -162,10 +162,18 @@ def get_coverage_risk(band: Band, lookback: int = DEFAULT_LOOKBACK) -> CoverageR
             is_active=True,
         ).values_list('song_id', flat=True)
     )
+    active_member_ids = list(
+        BandMember.objects.filter(
+            bandmembership__band=band,
+            bandmembership__is_active=True,
+            user__is_active=True,
+        ).values_list('pk', flat=True)
+    )
 
     all_assignments = list(
         PartAssignment.objects.filter(
             song_part__song_id__in=rotation_song_ids,
+            member_id__in=active_member_ids,
             member__user__is_active=True,
         )
         .exclude(performance_readiness=PerformanceReadiness.NOT_READY)
@@ -178,6 +186,7 @@ def get_coverage_risk(band: Band, lookback: int = DEFAULT_LOOKBACK) -> CoverageR
     assigned_member_ids_by_song = {}
     for assignment in PartAssignment.objects.filter(
         song_part__song_id__in=rotation_song_ids,
+        member_id__in=active_member_ids,
     ).values_list('song_part__song_id', 'member_id'):
         song_id, member_id = assignment
         assigned_member_ids_by_song.setdefault(song_id, set()).add(member_id)

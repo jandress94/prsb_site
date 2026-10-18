@@ -3,6 +3,22 @@
 from django.db import migrations
 
 
+def noop_forward(apps, schema_editor):
+    pass
+
+
+def restore_song_rotation(apps, schema_editor):
+    """Copy PRSB BandSong.in_gig_rotation back onto Song as the column returns."""
+    Band = apps.get_model("band", "Band")
+    BandSong = apps.get_model("band", "BandSong")
+    Song = apps.get_model("band", "Song")
+    band = Band.objects.filter(slug="prsb").first()
+    if band is None:
+        return
+    for band_song in BandSong.objects.filter(band=band):
+        Song.objects.filter(pk=band_song.song_id).update(in_gig_rotation=band_song.in_gig_rotation)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,6 +26,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(noop_forward, restore_song_rotation),
         migrations.RemoveField(
             model_name='song',
             name='in_gig_rotation',

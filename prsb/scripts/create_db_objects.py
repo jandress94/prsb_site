@@ -8,7 +8,9 @@ django.setup()
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 
-from band.models import Band, BandMember, BandSong, Song, SongPart, Instrument, PartAssignment, DrumKitCoverPlayer
+from band.models import (
+    Band, BandMember, BandMembership, BandSong, Song, SongPart, Instrument, PartAssignment, DrumKitCoverPlayer,
+)
 import pandas as pd
 import numpy as np
 
@@ -158,13 +160,22 @@ def get_part_assignments(band_members: list[BandMember], song_parts: list[SongPa
     return part_assignments
 
 
-def get_drum_kit_cover_players(band_members: list[BandMember]) -> list[DrumKitCoverPlayer]:
+def get_prsb_band() -> Band:
+    band, _ = Band.objects.get_or_create(
+        slug="prsb",
+        defaults={"name": "PRSB", "is_active": True},
+    )
+    return band
+
+
+def get_drum_kit_cover_players(band_members: list[BandMember], band: Band) -> list[DrumKitCoverPlayer]:
     cover_players_df = pd.read_csv('resources/data/DrumKitCoverPlayers.csv')
     user_lookup = get_member_lookup(band_members)
     cover_players = []
 
     for _, row in cover_players_df.iterrows():
         cover_players.append(DrumKitCoverPlayer(
+            band=band,
             member=user_lookup[row['First Name']],
             priority=row['Priority'],
         ))
@@ -173,10 +184,10 @@ def get_drum_kit_cover_players(band_members: list[BandMember]) -> list[DrumKitCo
 
 
 if __name__ == '__main__':
+    prsb = get_prsb_band()
     songs = Song.objects.all()
     if len(songs) == 0:
         songs = get_songs()
-        prsb = Band.objects.get(slug="prsb")
         for song, in_gig_rotation in songs:
             song.save()
             BandSong.objects.update_or_create(
@@ -204,20 +215,27 @@ if __name__ == '__main__':
         instruments = list(instruments)
 
     users = User.objects.all()
+    created_members = False
     if len(users) <= 1:
         users = get_users()
         for user in users:
             user.save()
+        created_members = True
     else:
         users = list(users)
 
-    band_members = BandMember.objects.all()
+    band_members = list(BandMember.objects.all())
     if len(band_members) == 0:
         band_members = get_band_members(users)
         for band_member in band_members:
             band_member.save()
-    else:
-        band_members = list(band_members)
+        created_members = True
+
+    if created_members:
+        for member in BandMember.objects.all():
+            BandMembership.objects.get_or_create(
+                band=prsb, member=member, defaults={"is_active": True},
+            )
 
     part_assignments = PartAssignment.objects.all()
     if len(part_assignments) == 0:
@@ -229,8 +247,11 @@ if __name__ == '__main__':
 
     drum_kit_cover_players = DrumKitCoverPlayer.objects.all()
     if len(drum_kit_cover_players) == 0:
-        drum_kit_cover_players = get_drum_kit_cover_players(band_members)
+        drum_kit_cover_players = get_drum_kit_cover_players(band_members, prsb)
         for cover_player in drum_kit_cover_players:
+            BandMembership.objects.get_or_create(
+                band=prsb, member=cover_player.member, defaults={"is_active": True},
+            )
             cover_player.save()
 
 

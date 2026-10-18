@@ -28,8 +28,9 @@ def attach_prsb(apps, schema_editor):
 
 
 def detach_prsb(apps, schema_editor):
-    Band = apps.get_model("band", "Band")
-    Band.objects.filter(slug="prsb").delete()
+    # Reversing 0034 is unsupported. Deleting the PRSB band would cascade and
+    # wipe DrumKitCoverPlayer and BandSpecialDate rows, so leave the band in place.
+    pass
 
 
 class Migration(migrations.Migration):

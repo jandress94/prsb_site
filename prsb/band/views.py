@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q
 from django import forms
 from django.db import connection
 from django.forms import modelformset_factory, formset_factory, inlineformset_factory
@@ -56,6 +56,7 @@ class BandScopedMixin:
         if request.method == "POST" and not self.band.is_active and request.resolver_match.url_name in {
             "song_create",
             "member_link",
+            "song_link",
             "gig_create",
         }:
             raise PermissionDenied("An inactive band cannot create new records.")
@@ -220,8 +221,6 @@ SongPartSoloFormSet = inlineformset_factory(
 
 
 class SongRotationFormMixin:
-    in_gig_rotation = forms.BooleanField(required=False, label="In gig rotation")
-
     def save_band_song_rotation(self, band, song, in_gig_rotation):
         band_song = BandSong.objects.filter(band=band, song=song).first()
         if band_song is None:
@@ -232,12 +231,16 @@ class SongRotationFormMixin:
 
 
 class SongCreateForm(SongRotationFormMixin, forms.ModelForm):
+    in_gig_rotation = forms.BooleanField(required=False, label="In gig rotation")
+
     class Meta:
         model = Song
         fields = ['title', 'composer', 'duration', 'form']
 
 
 class SongUpdateForm(SongRotationFormMixin, forms.ModelForm):
+    in_gig_rotation = forms.BooleanField(required=False, label="In gig rotation")
+
     class Meta:
         model = Song
         fields = ['title', 'composer', 'duration', 'form']
@@ -346,7 +349,21 @@ class SongUnlinkView(BandScopedMixin, generic.View):
         return redirect("band:song_list", slug=slug)
 
 
-def get_missing_person_songs():
+def get_missing_person_songs(band):
+    member_ids = list(
+        BandMembership.objects.filter(
+            band=band,
+            is_active=True,
+            member__user__is_active=True,
+        ).values_list("member_id", flat=True)
+    )
+    song_ids = list(
+        BandSong.objects.filter(band=band, is_active=True).values_list("song_id", flat=True)
+    )
+    if not member_ids or not song_ids:
+        return []
+    member_placeholders = ", ".join(["%s"] * len(member_ids))
+    song_placeholders = ", ".join(["%s"] * len(song_ids))
     with connection.cursor() as cursor:
         query = f"""
             WITH missing_ids AS (
@@ -357,7 +374,9 @@ def get_missing_person_songs():
                     {BandMember._meta.db_table} b,
                     {Song._meta.db_table} s
                 WHERE
-                    NOT EXISTS (
+                    b.user_id IN ({member_placeholders})
+                    AND s.id IN ({song_placeholders})
+                    AND NOT EXISTS (
                         SELECT 
                             1
                         FROM 
@@ -385,7 +404,7 @@ def get_missing_person_songs():
                 ORDER BY
                     title, name
         """
-        cursor.execute(query)
+        cursor.execute(query, [*member_ids, *song_ids])
 
         return cursor.fetchall()
 
@@ -406,7 +425,7 @@ class PartAssignmentListView(BandScopedMixin, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['missing_person_songs'] = get_missing_person_songs()
+        context['missing_person_songs'] = get_missing_person_songs(self.band)
         return context
 
 
@@ -869,10 +888,13 @@ class GigSetlistEntryForm(forms.ModelForm):
         self.gig = gig
         super().__init__(*args, **kwargs)
         if gig is not None:
-            self.fields["song"].queryset = Song.objects.filter(
+            song_filter = Q(
                 band_songs__band__in=gig.bands.all(),
                 band_songs__is_active=True,
-            ).distinct()
+            )
+            if self.instance.song_id:
+                song_filter |= Q(pk=self.instance.song_id)
+            self.fields["song"].queryset = Song.objects.filter(song_filter).distinct()
             self.fields["staffing_band"].queryset = gig.bands.all()
             self.show_staffing_fields = gig.bands.count() >= 2
         else:
@@ -1048,11 +1070,11 @@ class GigPartAssignmentOverrideForm(forms.ModelForm):
         member = cleaned_data.get("member")
         song_part = cleaned_data.get("song_part")
         if member and song_part:
-            entry = GigSetlistEntry.objects.filter(gig_id=self.gig_id, song_id=song_part.song_id).first()
-            if entry is not None:
-                pool = entry_pool_member_ids(entry)
-                if member.pk not in pool:
-                    self.add_error("member", "That member is outside the staffing pool for this song.")
+            entries = GigSetlistEntry.objects.filter(
+                gig_id=self.gig_id, song_id=song_part.song_id,
+            )
+            if any(member.pk not in entry_pool_member_ids(entry) for entry in entries):
+                self.add_error("member", "That member is outside the staffing pool for this song.")
         return cleaned_data
 
 
@@ -1096,19 +1118,13 @@ class GigPartAssignmentPrintView(BandScopedMixin, generic.TemplateView):
     template_name = 'band/gig_part_assignment_print.html'
 
     @staticmethod
-    def _sort_by_setlist_order(gig: Gig, assignments: list[GigPartAssignment]) -> list[GigPartAssignment]:
-        subquery = GigSetlistEntry.objects.filter(
-            gig=gig,
-            song=OuterRef('song')
-        ).order_by('_order').values('id')[:1]
-        first_entries = GigSetlistEntry.objects.filter(
-            gig=gig,
-            break_duration__isnull=True,
-            id__in=Subquery(subquery)
+    def _sort_by_setlist_order(_gig: Gig, assignments: list[GigPartAssignment]) -> list[GigPartAssignment]:
+        return sorted(
+            assignments,
+            key=lambda assignment: (
+                assignment.setlist_entry._order if assignment.setlist_entry is not None else 0
+            ),
         )
-        ordering = {entry.song: entry._order for entry in first_entries}
-
-        return sorted(assignments, key=lambda e: ordering.get(e.song))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1146,15 +1162,14 @@ class GigPartAssignmentByMemberView(BandScopedMixin, generic.TemplateView):
         setlist_assignments, _, _ = get_gig_part_assignments(gig, list(overrides))
         setlist_sorted = GigPartAssignmentPrintView._sort_by_setlist_order(gig, setlist_assignments)
 
-        # 1-based song number by setlist order
-        song_to_number = {gpa.song: i + 1 for i, gpa in enumerate(setlist_sorted)}
-
-        # Group by member: member -> list of (song_number, song_name, part, instrument, is_cover)
+        # 1-based song number from this entry's setlist position, so a repeated song
+        # keeps the later entry's number instead of the first entry's.
         member_rows = {}
         for gpa in setlist_sorted:
+            song_number = gpa.setlist_entry._order + 1 if gpa.setlist_entry is not None else 0
             for pa in gpa.part_assignments:
                 row = (
-                    song_to_number[gpa.song],
+                    song_number,
                     gpa.song.title,
                     pa.song_part,
                     pa.instrument,

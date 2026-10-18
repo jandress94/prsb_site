@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -1025,6 +1026,28 @@ class CoverageRiskScoringTestCase(TestCase):
         self.assertEqual(len(lead.coverers), 1)
         self.assertEqual(lead.coverers[0].member.user.username, "cr_alice")
 
+    def test_coverage_risk_ignores_coverers_outside_the_active_roster(self):
+        other = Band.objects.create(name="Cover Other", slug="cover-other")
+        outsider = User.objects.create_user(
+            username="cr_outside_roster", first_name="Out", last_name="Roster",
+        )
+        inactive = User.objects.create_user(
+            username="cr_inactive_roster", first_name="Inact", last_name="Roster",
+        )
+        BandMembership.objects.create(band=other, member=outsider.bandmember, is_active=True)
+        BandMembership.objects.create(band=self.prsb, member=inactive.bandmember, is_active=False)
+        for member in (outsider.bandmember, inactive.bandmember):
+            PartAssignment.objects.create(
+                member=member, song_part=self.part_lead, instrument=self.lead,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+        report = get_coverage_risk(self.prsb, lookback=10)
+        lead = next(p for p in report.songs[0].parts if p.song_part.id == self.part_lead.id)
+        names = {c.member.user.username for c in lead.coverers}
+        self.assertNotIn("cr_outside_roster", names)
+        self.assertNotIn("cr_inactive_roster", names)
+        self.assertAlmostEqual(lead.effective_coverage, 0.0)
+
 
 class BandReportScopeTestCase(TestCase):
     def test_coverage_risk_ignores_another_bands_rotation_song(self):
@@ -1953,6 +1976,40 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
         special = BandSpecialDate.objects.get(pk=special_id)
         self.assertEqual(special.band, band)
 
+    def test_reverse_0035_copies_prsb_rotation_back_to_song(self):
+        try:
+            call_command("migrate", "band", "0033", verbosity=0, interactive=False)
+            state = MigrationExecutor(connection).loader.project_state(
+                [("band", "0033_seed_drum_kit_cover_players")],
+            )
+            SongModel = state.apps.get_model("band", "Song")
+            on_song = SongModel.objects.create(title="Rotation On", composer="X", in_gig_rotation=True)
+            off_song = SongModel.objects.create(title="Rotation Off", composer="X", in_gig_rotation=False)
+            call_command("migrate", "band", "0035", verbosity=0, interactive=False)
+            call_command("migrate", "band", "0034", verbosity=0, interactive=False)
+            state_0034 = MigrationExecutor(connection).loader.project_state(
+                [("band", "0034_multiple_bands")],
+            )
+            HistoricalSong = state_0034.apps.get_model("band", "Song")
+            self.assertTrue(HistoricalSong.objects.get(pk=on_song.pk).in_gig_rotation)
+            self.assertFalse(HistoricalSong.objects.get(pk=off_song.pk).in_gig_rotation)
+        finally:
+            call_command("migrate", "band", verbosity=0, interactive=False)
+
+    def test_reverse_0034_does_not_delete_cover_players_or_special_dates(self):
+        try:
+            _, cover_id, special_id = self._remigrate_through_backfill(seed_historical_rows=True)
+            call_command("migrate", "band", "0033", verbosity=0, interactive=False)
+            state = MigrationExecutor(connection).loader.project_state(
+                [("band", "0033_seed_drum_kit_cover_players")],
+            )
+            Cover = state.apps.get_model("band", "DrumKitCoverPlayer")
+            Special = state.apps.get_model("band", "BandSpecialDate")
+            self.assertTrue(Cover.objects.filter(pk=cover_id).exists())
+            self.assertTrue(Special.objects.filter(pk=special_id).exists())
+        finally:
+            call_command("migrate", "band", verbosity=0, interactive=False)
+
 
 class SongAbsoluteUrlTestCase(TestCase):
     def test_get_absolute_url_uses_linked_band_slug(self):
@@ -2035,6 +2092,26 @@ class BandPageScopeTestCase(TestCase):
         song_response = self.client.get(reverse("band:song_list", kwargs={"slug": "other"}))
         self.assertEqual(list(song_response.context["object_list"]), [])
 
+    def test_missing_person_rows_stay_on_this_bands_active_roster_and_songs(self):
+        insider = User.objects.create_user(username="missing_in", first_name="In", last_name="Side")
+        outsider = User.objects.create_user(username="missing_out", first_name="Out", last_name="Side")
+        BandMembership.objects.create(band=self.prsb, member=insider.bandmember, is_active=True)
+        BandMembership.objects.create(band=self.other, member=outsider.bandmember, is_active=True)
+        active_song = Song.objects.create(title="Active Missing Song")
+        BandSong.objects.create(band=self.prsb, song=active_song, is_active=True)
+        foreign_song = Song.objects.create(title="Foreign Missing Song")
+        BandSong.objects.create(band=self.other, song=foreign_song, is_active=True)
+        inactive_song = Song.objects.create(title="Inactive Missing Song")
+        BandSong.objects.create(band=self.prsb, song=inactive_song, is_active=False)
+
+        response = self.client.get(reverse("band:part_assignment_list", kwargs={"slug": "prsb"}))
+        rows = set(response.context["missing_person_songs"])
+        self.assertIn(("In Side", "Active Missing Song"), rows)
+        self.assertNotIn(("Out Side", "Active Missing Song"), rows)
+        self.assertNotIn(("Out Side", "Foreign Missing Song"), rows)
+        self.assertNotIn(("In Side", "Foreign Missing Song"), rows)
+        self.assertNotIn(("In Side", "Inactive Missing Song"), rows)
+
     def test_deactivate_hides_member_and_link_reactivates(self):
         membership = BandMembership.objects.get(band=self.prsb, member=self.user.bandmember)
         membership.is_active = False
@@ -2068,11 +2145,34 @@ class BandPageScopeTestCase(TestCase):
         self.assertEqual(self.song.title, "Renamed")
         self.assertFalse(self.song.band_songs.get(band=self.other).in_gig_rotation)
 
+    def test_posting_rotation_on_sets_this_band_and_leaves_the_other(self):
+        self.song.band_songs.filter(band=self.prsb).update(in_gig_rotation=False)
+        BandSong.objects.create(band=self.other, song=self.song, in_gig_rotation=False)
+        response = self.client.post(
+            reverse("band:song_update", kwargs={"slug": "prsb", "pk": self.song.pk}),
+            {"title": self.song.title, "composer": "", "duration": "", "form": "", "in_gig_rotation": "on",
+             "parts-TOTAL_FORMS": "0", "parts-INITIAL_FORMS": "0", "parts-MIN_NUM_FORMS": "0",
+             "parts-MAX_NUM_FORMS": "1000"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self.song.band_songs.get(band=self.prsb).in_gig_rotation)
+        self.assertFalse(self.song.band_songs.get(band=self.other).in_gig_rotation)
+
+    def test_song_create_posts_rotation_on_for_this_band(self):
+        response = self.client.post(
+            reverse("band:song_create", kwargs={"slug": "prsb"}),
+            {"title": "Created With Rotation", "composer": "", "duration": "", "form": "", "in_gig_rotation": "on"},
+        )
+        self.assertEqual(response.status_code, 302)
+        created = Song.objects.get(title="Created With Rotation")
+        self.assertTrue(created.band_songs.get(band=self.prsb).in_gig_rotation)
+
     def test_inactive_band_post_to_create_endpoints_returns_403(self):
         inactive = Band.objects.create(name="Inactive", slug="inactive", is_active=False)
         cases = (
             ("band:song_create", {}),
             ("band:member_link", {"member": self.user.bandmember.pk}),
+            ("band:song_link", {"song": self.song.pk}),
             ("band:gig_create", {}),
         )
         for url_name, data in cases:
@@ -2195,6 +2295,63 @@ class GigStaffingValidationTestCase(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("member", form.errors)
+
+    def test_override_rejects_member_outside_any_entry_pool_for_the_song(self):
+        gig = self.make_two_band_gig()
+        first, second = list(gig.bands.order_by("name"))
+        song = self.link_song(first, "Two Pool Song")
+        BandSong.objects.create(band=second, song=song, is_active=True, in_gig_rotation=True)
+        GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=first, _order=0,
+        )
+        GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=second, _order=1,
+        )
+        part = SongPart.objects.create(song=song, name="Part")
+        drums = Instrument.objects.create(name=f"Two-pool drums {gig.pk}", order=0)
+        gig_drums = GigInstrument.objects.create(gig=gig, instrument=drums, gig_quantity=1)
+        in_first = User.objects.create_user(
+            username=f"two_pool_{gig.pk}", first_name="First", last_name="Only",
+        )
+        BandMembership.objects.create(band=first, member=in_first.bandmember, is_active=True)
+        GigAttendance.objects.create(gig=gig, member=in_first.bandmember, status=GigAttendance.AVAILABLE)
+
+        form = GigPartAssignmentOverrideForm(
+            data={
+                "override_type": OverrideType.NOT_PLAYING,
+                "member": in_first.bandmember.pk,
+                "song_part": part.pk,
+                "gig_instrument": gig_drums.pk,
+            },
+            gig_id=gig.pk,
+            gig_name=gig.name,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("member", form.errors)
+
+    def test_setlist_save_keeps_entry_whose_song_link_is_inactive(self):
+        gig = self.make_two_band_gig()
+        first = gig.bands.order_by("name").first()
+        song = self.link_song(first, "Stale Link Song")
+        entry = GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="only", staffing_band=first,
+        )
+        BandSong.objects.filter(band=first, song=song).update(is_active=False)
+        url = reverse("band:gig_setlist_update", kwargs={"slug": first.slug, "gig_id": gig.pk})
+        response = self.client.post(url, {
+            "form-TOTAL_FORMS": "1",
+            "form-INITIAL_FORMS": "1",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-id": str(entry.pk),
+            "form-0-song": str(song.pk),
+            "form-0-break_duration": "",
+            "form-0-staffing_mode": "only",
+            "form-0-staffing_band": str(first.pk),
+        })
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.song_id, song.pk)
 
     def test_add_song_on_one_band_gig_creates_entry(self):
         prsb = Band.objects.get(slug=PRSB_SLUG)
@@ -2524,4 +2681,99 @@ class MultiBandSolverTestCase(TestCase):
         self.assertEqual(len(setlist), 1)
         self.assertEqual(setlist[0].part_assignments[0].member, cover)
         self.assertTrue(setlist[0].part_assignments[0].is_drum_kit_cover)
+
+    def test_prefer_complete_lineup_beats_nonpreferred_stacked_solos(self):
+        n = self._next_id()
+        preferred_band = Band.objects.create(name=f"Solo Pref {n}", slug=f"solo-pref-{n}")
+        other_band = Band.objects.create(name=f"Solo Other {n}", slug=f"solo-other-{n}")
+        gig = self._gig(n, [preferred_band, other_band])
+        horn = Instrument.objects.create(name=f"Solo Horn {n}", quantity=1, order=0)
+        plentiful = Instrument.objects.create(name=f"Solo Plenty {n}", quantity=10, order=1)
+        GigInstrument.objects.create(gig=gig, instrument=horn, gig_quantity=1)
+        GigInstrument.objects.create(gig=gig, instrument=plentiful, gig_quantity=10)
+
+        song = Song.objects.create(title=f"Stacked Solo {n}")
+        for band in (preferred_band, other_band):
+            BandSong.objects.create(band=band, song=song, is_active=True, in_gig_rotation=True)
+        lead = SongPart.objects.create(song=song, name="Lead", has_solo=True)
+        pad = SongPart.objects.create(song=song, name="Pad", has_solo=True)
+
+        pat = User.objects.create_user(
+            username=f"stack_pat_{n}", first_name="Pat", last_name=f"P{n}",
+        ).bandmember
+        sam = User.objects.create_user(
+            username=f"stack_sam_{n}", first_name="Sam", last_name=f"S{n}",
+        ).bandmember
+        nina = User.objects.create_user(
+            username=f"stack_nina_{n}", first_name="Nina", last_name=f"N{n}",
+        ).bandmember
+        BandMembership.objects.create(band=preferred_band, member=pat)
+        BandMembership.objects.create(band=preferred_band, member=sam)
+        BandMembership.objects.create(band=other_band, member=nina)
+        for member in (pat, sam, nina):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        PartAssignment.objects.create(
+            member=pat, song_part=lead, instrument=horn,
+            performance_readiness=PerformanceReadiness.READY, can_solo=True,
+        )
+        PartAssignment.objects.create(
+            member=pat, song_part=pad, instrument=plentiful,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        PartAssignment.objects.create(
+            member=sam, song_part=lead, instrument=plentiful,
+            performance_readiness=PerformanceReadiness.READY, can_solo=False,
+        )
+        PartAssignment.objects.create(
+            member=nina, song_part=pad, instrument=plentiful,
+            performance_readiness=PerformanceReadiness.READY, can_solo=True,
+        )
+        GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="prefer", staffing_band=preferred_band,
+        )
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].unplayed_parts, [])
+        members = {row.member for row in setlist[0].part_assignments}
+        self.assertIn(pat, members)
+        self.assertIn(sam, members)
+        self.assertNotIn(nina, members)
+
+    def test_print_and_by_member_keep_each_setlist_entry_number(self):
+        n = self._next_id()
+        band = Band.objects.create(name=f"Number Band {n}", slug=f"number-band-{n}")
+        gig = self._gig(n, [band])
+        instrument = Instrument.objects.create(name=f"Number Inst {n}", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=1)
+        song_a = Song.objects.create(title=f"Repeat Song {n}")
+        song_b = Song.objects.create(title=f"Middle Song {n}")
+        member = User.objects.create_user(
+            username=f"number_player_{n}", first_name="Num", last_name=f"P{n}",
+        ).bandmember
+        BandMembership.objects.create(band=band, member=member)
+        GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        for song in (song_a, song_b):
+            BandSong.objects.create(band=band, song=song, is_active=True, in_gig_rotation=True)
+            part = SongPart.objects.create(song=song, name="Lead")
+            PartAssignment.objects.create(
+                member=member, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+        GigSetlistEntry.objects.create(gig=gig, song=song_a, _order=0)
+        GigSetlistEntry.objects.create(gig=gig, song=song_b, _order=1)
+        GigSetlistEntry.objects.create(gig=gig, song=song_a, _order=2)
+
+        printed = self.client.get(
+            reverse("band:gig_part_assignment_print", kwargs={"slug": band.slug, "pk": gig.pk}),
+            {"order": "setlist"},
+        )
+        headings = re.findall(r"<h2>(.*?)</h2>", printed.content.decode())
+        self.assertEqual(headings, [song_a.title, song_b.title, song_a.title])
+
+        by_member = self.client.get(
+            reverse("band:gig_part_assignment_by_member", kwargs={"slug": band.slug, "pk": gig.pk}),
+        )
+        rows = by_member.context["member_assignments"][0][1]
+        entries = list(GigSetlistEntry.objects.filter(gig=gig).order_by("_order"))
+        self.assertEqual([row[0] for row in rows], [entry._order + 1 for entry in entries])
 

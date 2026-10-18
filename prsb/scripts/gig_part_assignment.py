@@ -301,10 +301,12 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
             c_soloist[i] = -soloist_reward
     # Override variables (indices num_assignments .. num_assignments+num_overrides-1) stay 0.
 
-    # One preferred player stays ahead of a non-preferred player, and any number of
-    # non-preferred assignments stays ahead of a single hole.
-    fit_swing = soloist_reward + max_instrument_reward + 1
-    non_preferred_penalty = fit_swing
+    # Several solo rewards can stack on one lineup. One non-preferred assignment has
+    # to cost more than all of them plus the full instrument reward. A hole still
+    # costs more than marking every candidate non-preferred. Keep this penalty off
+    # c_instrument so instrument_fit is scored from the instrument coefficients alone.
+    non_preferred_penalty = max_concurrent_players * soloist_reward + max_instrument_reward + 1
+    c_preference = np.zeros(num_vars)
     if preferred_member_ids is not None:
         missing_part_penalty = max(
             missing_part_penalty,
@@ -312,12 +314,12 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
         )
         for index, assignment in enumerate(all_assignments):
             if assignment.member_id not in preferred_member_ids:
-                c_instrument[index] += non_preferred_penalty
+                c_preference[index] = non_preferred_penalty
 
     c_missing_part_penalty = np.zeros(num_vars)
     c_missing_part_penalty[num_assignments + num_overrides:] = missing_part_penalty
 
-    c = c_instrument + c_random + c_per_song_penalty + c_soloist + c_missing_part_penalty
+    c = c_instrument + c_random + c_per_song_penalty + c_soloist + c_preference + c_missing_part_penalty
 
     ##########################################################################################
     # Other Settings
