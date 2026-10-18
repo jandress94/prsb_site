@@ -59,7 +59,7 @@ class CoverageRiskReport:
 def _lookback_gigs(band: Band, lookback: int) -> list[Gig]:
     now = timezone.now()
     return list(
-        Gig.objects.filter(bands=band, is_small_group=False, start_datetime__lte=now)
+        Gig.objects.filter(bands=band, include_in_stats=True, start_datetime__lte=now)
         .order_by('-start_datetime')[:lookback]
     )
 

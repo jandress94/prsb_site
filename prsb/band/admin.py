@@ -125,8 +125,8 @@ def gig_date(obj: Gig):
 
 
 class GigAdmin(admin.ModelAdmin):
-    list_display = ['name', gig_is_upcoming, gig_date, 'is_small_group']
-    list_filter = ['start_datetime', 'is_small_group']
+    list_display = ['name', gig_is_upcoming, gig_date, 'include_in_stats']
+    list_filter = ['start_datetime', 'include_in_stats']
 
 admin.site.register(Gig, GigAdmin)
 

@@ -765,23 +765,23 @@ class MaxInstrumentUsageTestCase(TestCase):
         )
 
 
-class GigIsSmallGroupTestCase(TestCase):
-    def test_default_is_full_band(self):
+class GigIncludeInStatsTestCase(TestCase):
+    def test_default_is_included(self):
         gig = Gig.objects.create(
             name="Full Band Gig",
             start_datetime=timezone.now() - timedelta(days=1),
             end_datetime=timezone.now() - timedelta(days=1) + timedelta(hours=2),
         )
-        self.assertFalse(gig.is_small_group)
+        self.assertTrue(gig.include_in_stats)
 
-    def test_can_mark_small_group(self):
+    def test_can_leave_a_gig_out_of_stats(self):
         gig = Gig.objects.create(
             name="Small Gig",
             start_datetime=timezone.now() - timedelta(days=1),
             end_datetime=timezone.now() - timedelta(days=1) + timedelta(hours=2),
-            is_small_group=True,
+            include_in_stats=False,
         )
-        self.assertTrue(Gig.objects.get(pk=gig.pk).is_small_group)
+        self.assertFalse(Gig.objects.get(pk=gig.pk).include_in_stats)
 
 
 class CoverageRiskScoringTestCase(TestCase):
@@ -817,14 +817,14 @@ class CoverageRiskScoringTestCase(TestCase):
         cls.part_bass = SongPart.objects.create(song=cls.song, name="Bass")
         SongPart.objects.create(song=cls.other, name="Lead")
 
-    def _past_gig(self, days_ago, *, small=False, name=None):
+    def _past_gig(self, days_ago, *, include_in_stats=True, name=None):
         start = self.now - timedelta(days=days_ago)
         return _link_gig_to_prsb(
             Gig.objects.create(
                 name=name or f"Gig-{days_ago}",
                 start_datetime=start,
                 end_datetime=start + timedelta(hours=2),
-                is_small_group=small,
+                include_in_stats=include_in_stats,
             )
         )
 
@@ -842,7 +842,7 @@ class CoverageRiskScoringTestCase(TestCase):
 
     def test_small_group_and_future_gigs_excluded(self):
         full = self._past_gig(2, name="Full")
-        self._past_gig(1, small=True, name="Small")
+        self._past_gig(1, include_in_stats=False, name="Small")
         future = Gig.objects.create(
             name="Future",
             start_datetime=self.now + timedelta(days=3),
@@ -2012,6 +2012,41 @@ class PrsbBackfillMigrationTestCase(TransactionTestCase):
             call_command("migrate", "band", verbosity=0, interactive=False)
 
 
+class IncludeInStatsMigrationTestCase(TransactionTestCase):
+    def test_migration_negates_the_old_flag_and_reverse_restores_it(self):
+        start = timezone.now()
+        end = start + timedelta(hours=2)
+        try:
+            call_command("migrate", "band", "0035", verbosity=0, interactive=False)
+            before = MigrationExecutor(connection).loader.project_state(
+                [("band", "0035_remove_song_in_gig_rotation")],
+            )
+            HistoricalGig = before.apps.get_model("band", "Gig")
+            excluded = HistoricalGig.objects.create(
+                name="Was small", start_datetime=start, end_datetime=end, is_small_group=True,
+            )
+            included = HistoricalGig.objects.create(
+                name="Was full", start_datetime=start, end_datetime=end, is_small_group=False,
+            )
+            call_command("migrate", "band", "0036", verbosity=0, interactive=False)
+            after = MigrationExecutor(connection).loader.project_state(
+                [("band", "0036_gig_include_in_stats")],
+            )
+            MigratedGig = after.apps.get_model("band", "Gig")
+            self.assertFalse(MigratedGig.objects.get(pk=excluded.pk).include_in_stats)
+            self.assertTrue(MigratedGig.objects.get(pk=included.pk).include_in_stats)
+
+            call_command("migrate", "band", "0035", verbosity=0, interactive=False)
+            restored = MigrationExecutor(connection).loader.project_state(
+                [("band", "0035_remove_song_in_gig_rotation")],
+            )
+            RestoredGig = restored.apps.get_model("band", "Gig")
+            self.assertTrue(RestoredGig.objects.get(pk=excluded.pk).is_small_group)
+            self.assertFalse(RestoredGig.objects.get(pk=included.pk).is_small_group)
+        finally:
+            call_command("migrate", "band", verbosity=0, interactive=False)
+
+
 class SongAbsoluteUrlTestCase(TestCase):
     def test_get_absolute_url_uses_linked_band_slug(self):
         song = Song.objects.create(title="Absolute URL Song")
@@ -2327,7 +2362,7 @@ class GigStaffingValidationTestCase(TestCase):
             "end_datetime": gig.end_datetime.strftime("%Y-%m-%dT%H:%M"),
             "address": "",
             "notes": "",
-            "is_small_group": "",
+            "include_in_stats": "",
             "bands": [str(pk) for pk in band_ids],
             "giginstrument_set-TOTAL_FORMS": "0",
             "giginstrument_set-INITIAL_FORMS": "0",

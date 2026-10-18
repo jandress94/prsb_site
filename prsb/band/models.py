@@ -222,9 +222,9 @@ class Gig(models.Model):
 
     notes = tinymce_models.HTMLField(blank=True)
 
-    is_small_group = models.BooleanField(
-        default=False,
-        help_text="If checked, this gig is excluded from coverage-risk attendance stats.",
+    include_in_stats = models.BooleanField(
+        default=True,
+        help_text="Include this gig in coverage-risk attendance stats.",
     )
 
     bands = models.ManyToManyField("Band", related_name="gig_set", blank=True)
