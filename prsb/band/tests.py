@@ -3308,3 +3308,7 @@ class BulkEditPartAssignmentViewTestCase(TestCase):
             "member_id", "song_part_id", "instrument_id", "performance_readiness", "can_solo",
         )))
 
+    def test_page_includes_picker_script(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, "band/js/part_assignment_bulk_edit.js")
+

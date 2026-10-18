@@ -75,4 +75,5 @@
     </form>
     {{ picker_members|json_script:"bulk-members" }}
     {{ picker_instruments|json_script:"bulk-instruments" }}
+    <script src="{% static 'band/js/part_assignment_bulk_edit.js' %}"></script>
 {% endblock %}
