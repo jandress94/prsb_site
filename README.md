@@ -38,8 +38,8 @@ Items marked `[agent]` were added from prior conversation themes and a project s
 - Band-scoped roles: membership restricts which bands a user can see and what they can edit (until then, any logged-in user can switch to any band)
 - addition of .../me (or something like that) to allow authenticated users direct access to their own profile and song parts
 - Member "About Me"
+- when editing the member availability on a multi-band gig, the members should be grouped by band. Same with the listings in the band member availability on gig details.
 - Caching / saving gig part assignments for better latency
-- Something better for the part-assignments page. Loading everything is too massive and isn't useful.
 - Other reports (t-shirts, birthdays, etc)
 - Refactor the gig part assignment scoring / solving logic to make it more clear and understandable.
 - move to lambda-based architecture and scale-to-zero DB to minimize cost.
