@@ -255,6 +255,18 @@ class GigSetlistEntry(models.Model):
     def is_break(self) -> bool:
         return self.song is None
 
+    @property
+    def staffing_note(self) -> str:
+        if self.staffing_mode == "only" and self.staffing_band_id:
+            label = f"Only {self.staffing_band}"
+        elif self.staffing_mode == "prefer" and self.staffing_band_id:
+            label = f"Prefer {self.staffing_band}"
+        elif self.staffing_mode == "any":
+            label = "Any Band"
+        else:
+            return ""
+        return f" ({label})"
+
     def clean(self):
         super().clean()
         if self.song is not None and self.break_duration is not None:

@@ -635,7 +635,84 @@ def _gig_missing_attendance_members(gig):
         user__is_active=True,
     ).exclude(
         pk__in=GigAttendance.objects.filter(gig=gig).values_list("member_id", flat=True),
-    ).distinct().order_by("user__first_name", "user__last_name")
+    ).distinct().select_related("user").order_by("user__first_name", "user__last_name")
+
+
+def _gig_member_band_labels(gig):
+    # Attendance is one row per member, so two gig bands share one combined heading.
+    memberships = (
+        BandMembership.objects.filter(band__in=gig.bands.all())
+        .order_by("band__name")
+        .values_list("member_id", "band__name", "is_active")
+    )
+    active = {}
+    inactive = {}
+    for member_id, band_name, is_active in memberships:
+        names = (active if is_active else inactive).setdefault(member_id, [])
+        if band_name not in names:
+            names.append(band_name)
+    labels = {}
+    for member_id in set(active) | set(inactive):
+        labels[member_id] = ", ".join(active.get(member_id) or inactive.get(member_id, []))
+    return labels
+
+
+def _availability_groups(items, labels, multi_band):
+    labeled = []
+    for item in items:
+        member = item if isinstance(item, BandMember) else item.member
+        label = labels.get(member.pk, "") if multi_band else ""
+        labeled.append((label, member.user.get_full_name(), member))
+    labeled.sort(key=lambda row: (row[0], row[1]))
+
+    groups = []
+    for label, _name, member in labeled:
+        if not groups or groups[-1]["label"] != label:
+            groups.append({"label": label, "members": []})
+        groups[-1]["members"].append(member)
+    return groups
+
+
+def _form_member_id(form):
+    raw = form["member_id"].value()
+    if raw in (None, ""):
+        return None
+    return int(raw)
+
+
+def _form_groups(formset, labels, multi_band):
+    unnamed = []
+    for form in formset:
+        if getattr(form, "member_name", None):
+            continue
+        member_id = _form_member_id(form)
+        if member_id is None:
+            form.member_name = ""
+            continue
+        unnamed.append((form, member_id))
+    if unnamed:
+        names = {
+            member.pk: member.user.get_full_name()
+            for member in BandMember.objects.filter(
+                pk__in=[member_id for _form, member_id in unnamed],
+            ).select_related("user")
+        }
+        for form, member_id in unnamed:
+            form.member_name = names.get(member_id, "")
+
+    rows = []
+    for form in formset:
+        member_id = _form_member_id(form)
+        label = labels.get(member_id, "") if multi_band else ""
+        rows.append((label, form.member_name, form))
+    rows.sort(key=lambda row: (row[0], row[1]))
+
+    groups = []
+    for label, _name, form in rows:
+        if not groups or groups[-1]["label"] != label:
+            groups.append({"label": label, "forms": []})
+        groups[-1]["forms"].append(form)
+    return groups
 
 
 class GigDetailView(BandScopedMixin, GigBandObjectMixin, generic.DetailView):
@@ -645,7 +722,7 @@ class GigDetailView(BandScopedMixin, GigBandObjectMixin, generic.DetailView):
         context = super().get_context_data(**kwargs)
         gig = context['object']
 
-        context['setlist'] = set_list = GigSetlistEntry.objects.filter(gig=gig)
+        context['setlist'] = set_list = GigSetlistEntry.objects.filter(gig=gig).select_related("song", "staffing_band")
 
         if len(set_list) > 0:
             music_duration = timedelta()
@@ -662,11 +739,16 @@ class GigDetailView(BandScopedMixin, GigBandObjectMixin, generic.DetailView):
             if total_duration != music_duration:
                 context['total_duration'] = total_duration
 
+        labels = _gig_member_band_labels(gig)
+        multi_band = gig.bands.count() >= 2
+        context["show_band_groups"] = multi_band
         for availability in GigAttendance.AVAILABILITY_CHOICES:
-            members = gig.gigattendance_set.filter(status=availability)
+            members = gig.gigattendance_set.filter(status=availability).select_related("member__user")
             context[f"{availability}_members"] = sorted(members, key=lambda ga: ga.member.user.get_full_name())
+            context[f"{availability}_groups"] = _availability_groups(members, labels, multi_band)
 
-        context["missing_members"] = _gig_missing_attendance_members(gig)
+        context["missing_members"] = missing = _gig_missing_attendance_members(gig)
+        context["missing_groups"] = _availability_groups(missing, labels, multi_band)
 
         return context
 
@@ -747,7 +829,7 @@ class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
     def get(self, request, gig_id, slug):
         gig = get_gig_for_band(gig_id, self.band)
 
-        existing_gig_attendance = GigAttendance.objects.filter(gig=gig)
+        existing_gig_attendance = GigAttendance.objects.filter(gig=gig).select_related("member__user")
         initial_data = [
             {
                 'attendance_id': ga.id,
@@ -774,7 +856,7 @@ class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
             initial=initial_data,
             form_kwargs={"eligible_member_ids": eligible_member_ids},
         )
-        return render(request, self.template_name, self.band_context(gig=gig, formset=formset))
+        return self._render_availability(request, gig, formset)
 
     def post(self, request, gig_id, slug):
         gig = get_gig_for_band(gig_id, self.band)
@@ -803,7 +885,16 @@ class GigAvailabilityUpdateView(BandScopedMixin, generic.View):
 
             return redirect("band:gig_detail", slug=self.band.slug, pk=gig.id)
         else:
-            return render(request, self.template_name, self.band_context(formset=formset, gig=gig))
+            return self._render_availability(request, gig, formset)
+
+    def _render_availability(self, request, gig, formset):
+        multi_band = gig.bands.count() >= 2
+        return render(request, self.template_name, self.band_context(
+            gig=gig,
+            formset=formset,
+            form_groups=_form_groups(formset, _gig_member_band_labels(gig), multi_band),
+            show_band_groups=multi_band,
+        ))
 
 
 class GigSetlistEntryForm(forms.ModelForm):

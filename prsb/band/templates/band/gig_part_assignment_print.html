@@ -19,7 +19,7 @@
 
     {% for gpa in gig_part_assignments_setlist %}
         <div class="avoid-break">
-            <h2>{{ gpa.song.title }}</h2>
+            <h2>{{ gpa.song.title }}{% if gpa.setlist_entry %}{{ gpa.setlist_entry.staffing_note }}{% endif %}</h2>
 
             <table class="sortable">
                 <thead>

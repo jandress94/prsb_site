@@ -50,7 +50,7 @@
         <h2>Setlist Songs</h2>
         {% for gpa in gig_part_assignments_setlist %}
             <details>
-                <summary>{{ gpa.song.title }}</summary>
+                <summary>{{ gpa.song.title }}{% if gpa.setlist_entry %}{{ gpa.setlist_entry.staffing_note }}{% endif %}</summary>
 
                 <table class="sortable">
                     <thead>

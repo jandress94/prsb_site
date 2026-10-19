@@ -3536,3 +3536,289 @@ class BulkEditPartAssignmentViewTestCase(TestCase):
         response = self.client.get(self.url)
         self.assertContains(response, "band/js/part_assignment_bulk_edit.js")
 
+
+class GigAvailabilityBandGroupingTestCase(TestCase):
+    def setUp(self):
+        self.alpha = Band.objects.create(name="Alpha Band", slug="alpha-band")
+        self.zulu = Band.objects.create(name="Zulu Band", slug="zulu-band")
+        self.gig = Gig.objects.create(
+            name="Two Band Gig",
+            start_datetime=timezone.now() + timedelta(days=4),
+            end_datetime=timezone.now() + timedelta(days=4, hours=2),
+        )
+        self.gig.bands.add(self.alpha, self.zulu)
+        self.zoe = self._member("zoe_alpha", "Zoe", "Alpha", self.alpha)
+        self.amy = self._member("amy_zulu", "Amy", "Zulu", self.zulu)
+        self.mia = self._member("mia_both", "Mia", "Both", self.alpha)
+        BandMembership.objects.create(band=self.zulu, member=self.mia)
+        self.ned = self._member("ned_missing", "Ned", "Missing", self.alpha)
+        self.uma = self._member("uma_zulu", "Uma", "Zulu", self.zulu)
+        self.may = self._member("may_zulu", "May", "Zulu", self.zulu)
+        GigAttendance.objects.create(gig=self.gig, member=self.zoe, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=self.gig, member=self.amy, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=self.gig, member=self.mia, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=self.gig, member=self.uma, status=GigAttendance.UNAVAILABLE)
+        GigAttendance.objects.create(gig=self.gig, member=self.may, status=GigAttendance.MAYBE_AVAILABLE)
+
+    def _member(self, username, first, last, band):
+        user = User.objects.create_user(username=username, first_name=first, last_name=last)
+        BandMembership.objects.create(band=band, member=user.bandmember)
+        return user.bandmember
+
+    def _detail(self):
+        return self.client.get(reverse("band:gig_detail", kwargs={"slug": "alpha-band", "pk": self.gig.pk}))
+
+    def _edit(self):
+        return self.client.get(reverse(
+            "band:gig_availability_update",
+            kwargs={"slug": "alpha-band", "gig_id": self.gig.pk},
+        ))
+
+    def _availability_html(self, response):
+        body = response.content.decode()
+        return body.split("Band Member Availability", 1)[1].split("<h2>Setlist</h2>", 1)[0]
+
+    def test_detail_groups_each_status_by_band(self):
+        response = self._detail()
+        self.assertTrue(response.context["show_band_groups"])
+        self.assertEqual(
+            [(group["label"], [str(member) for member in group["members"]]) for group in response.context["available_groups"]],
+            [
+                ("Alpha Band", ["Zoe Alpha"]),
+                ("Alpha Band, Zulu Band", ["Mia Both"]),
+                ("Zulu Band", ["Amy Zulu"]),
+            ],
+        )
+        self.assertEqual(
+            [(group["label"], [str(member) for member in group["members"]]) for group in response.context["maybe_available_groups"]],
+            [("Zulu Band", ["May Zulu"])],
+        )
+        self.assertEqual(
+            [(group["label"], [str(member) for member in group["members"]]) for group in response.context["unavailable_groups"]],
+            [("Zulu Band", ["Uma Zulu"])],
+        )
+        self.assertEqual(
+            [(group["label"], [str(member) for member in group["members"]]) for group in response.context["missing_groups"]],
+            [("Alpha Band", ["Ned Missing"])],
+        )
+        self.assertEqual(len(response.context["available_members"]), 3)
+
+        availability = self._availability_html(response)
+        self.assertLess(availability.index(">Alpha Band<"), availability.index("Zoe Alpha"))
+        self.assertLess(availability.index("Zoe Alpha"), availability.index(">Alpha Band, Zulu Band<"))
+        self.assertLess(availability.index(">Alpha Band, Zulu Band<"), availability.index("Mia Both"))
+        self.assertLess(availability.index("Mia Both"), availability.index(">Zulu Band<"))
+        self.assertLess(availability.index(">Zulu Band<"), availability.index("Amy Zulu"))
+        self.assertEqual(availability.count("Mia Both"), 1)
+
+    def test_edit_form_groups_by_band_without_duplicating_a_shared_member(self):
+        response = self._edit()
+        self.assertTrue(response.context["show_band_groups"])
+        grouped = [
+            (group["label"], [form.member_name for form in group["forms"]])
+            for group in response.context["form_groups"]
+        ]
+        self.assertEqual(grouped, [
+            ("Alpha Band", ["Ned Missing", "Zoe Alpha"]),
+            ("Alpha Band, Zulu Band", ["Mia Both"]),
+            ("Zulu Band", ["Amy Zulu", "May Zulu", "Uma Zulu"]),
+        ])
+        self.assertEqual(response.context["formset"].total_form_count(), 6)
+        body = response.content.decode()
+        self.assertLess(body.index(">Alpha Band<"), body.index("Zoe Alpha"))
+        self.assertLess(body.index("Zoe Alpha"), body.index(">Zulu Band<"))
+        self.assertLess(body.index(">Zulu Band<"), body.index("Amy Zulu"))
+        self.assertEqual(body.count("Mia Both"), 1)
+
+    def test_single_band_gig_stays_a_flat_list(self):
+        solo = Gig.objects.create(
+            name="Solo Gig",
+            start_datetime=timezone.now() + timedelta(days=5),
+            end_datetime=timezone.now() + timedelta(days=5, hours=2),
+        )
+        solo.bands.add(self.alpha)
+        GigAttendance.objects.create(gig=solo, member=self.zoe, status=GigAttendance.AVAILABLE)
+        detail = self.client.get(reverse("band:gig_detail", kwargs={"slug": "alpha-band", "pk": solo.pk}))
+        edit = self.client.get(reverse(
+            "band:gig_availability_update",
+            kwargs={"slug": "alpha-band", "gig_id": solo.pk},
+        ))
+        self.assertFalse(detail.context["show_band_groups"])
+        self.assertFalse(edit.context["show_band_groups"])
+        self.assertEqual(
+            [str(member) for member in detail.context["available_groups"][0]["members"]],
+            ["Zoe Alpha"],
+        )
+        self.assertNotContains(detail, 'class="band-name"')
+        self.assertNotContains(edit, 'class="band-group"')
+        self.assertContains(detail, "Zoe Alpha")
+        self.assertContains(edit, "Zoe Alpha")
+
+    def test_inactive_membership_still_groups_and_active_band_wins(self):
+        ina = self._member("ina_old", "Ina", "Inactive", self.zulu)
+        BandMembership.objects.filter(member=ina, band=self.zulu).update(is_active=False)
+        pat = self._member("pat_partial", "Pat", "Partial", self.alpha)
+        BandMembership.objects.create(band=self.zulu, member=pat, is_active=False)
+        GigAttendance.objects.create(gig=self.gig, member=ina, status=GigAttendance.AVAILABLE)
+        GigAttendance.objects.create(gig=self.gig, member=pat, status=GigAttendance.AVAILABLE)
+
+        detail = self._detail()
+        available = [
+            (group["label"], [str(member) for member in group["members"]])
+            for group in detail.context["available_groups"]
+        ]
+        self.assertEqual(available, [
+            ("Alpha Band", ["Pat Partial", "Zoe Alpha"]),
+            ("Alpha Band, Zulu Band", ["Mia Both"]),
+            ("Zulu Band", ["Amy Zulu", "Ina Inactive"]),
+        ])
+
+    def test_saving_availability_still_updates_the_member(self):
+        page = self._edit()
+        formset = page.context["formset"]
+        data = {
+            "form-TOTAL_FORMS": str(formset.total_form_count()),
+            "form-INITIAL_FORMS": str(formset.initial_form_count()),
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+        }
+        for form in formset:
+            data[form.add_prefix("attendance_id")] = form["attendance_id"].value() or ""
+            data[form.add_prefix("member_id")] = form["member_id"].value()
+            status = form["status"].value() or ""
+            if form.member_name == "Amy Zulu":
+                status = GigAttendance.UNAVAILABLE
+            data[form.add_prefix("status")] = status
+
+        response = self.client.post(reverse(
+            "band:gig_availability_update",
+            kwargs={"slug": "alpha-band", "gig_id": self.gig.pk},
+        ), data)
+        self.assertRedirects(response, reverse("band:gig_detail", kwargs={"slug": "alpha-band", "pk": self.gig.pk}))
+        self.assertEqual(
+            GigAttendance.objects.get(gig=self.gig, member=self.amy).status,
+            GigAttendance.UNAVAILABLE,
+        )
+
+    def test_invalid_post_redisplays_names_inside_band_groups(self):
+        page = self._edit()
+        formset = page.context["formset"]
+        data = {
+            "form-TOTAL_FORMS": str(formset.total_form_count()),
+            "form-INITIAL_FORMS": str(formset.initial_form_count()),
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+        }
+        for form in formset:
+            data[form.add_prefix("attendance_id")] = form["attendance_id"].value() or ""
+            data[form.add_prefix("member_id")] = form["member_id"].value()
+            status = form["status"].value() or ""
+            if form.member_name == "Amy Zulu":
+                status = "bogus"
+            data[form.add_prefix("status")] = status
+
+        response = self.client.post(reverse(
+            "band:gig_availability_update",
+            kwargs={"slug": "alpha-band", "gig_id": self.gig.pk},
+        ), data)
+        self.assertEqual(response.status_code, 200)
+        grouped = [
+            (group["label"], [form.member_name for form in group["forms"]])
+            for group in response.context["form_groups"]
+        ]
+        self.assertIn(("Zulu Band", ["Amy Zulu", "May Zulu", "Uma Zulu"]), grouped)
+        self.assertContains(response, "Amy Zulu")
+
+
+class SetlistStaffingNoteTestCase(TestCase):
+    def test_staffing_note_is_blank_without_a_multi_band_mode(self):
+        gig = Gig.objects.create(
+            name="Plain Gig",
+            start_datetime=timezone.now() + timedelta(days=1),
+            end_datetime=timezone.now() + timedelta(days=1, hours=2),
+        )
+        song = Song.objects.create(title="Plain Song")
+        entry = GigSetlistEntry(gig=gig, song=song, staffing_mode="", staffing_band=None)
+        self.assertEqual(entry.staffing_note, "")
+        entry.staffing_mode = "only"
+        self.assertEqual(entry.staffing_note, "")
+
+    def test_pages_show_only_prefer_and_any_band(self):
+        prsb = Band.objects.get(slug=PRSB_SLUG)
+        pan = Band.objects.create(name="Pan Ultimate", slug="pan-ultimate")
+        gig = Gig.objects.create(
+            name="Staffed Gig",
+            start_datetime=timezone.now() + timedelta(days=2),
+            end_datetime=timezone.now() + timedelta(days=2, hours=2),
+        )
+        gig.bands.add(prsb, pan)
+        member = User.objects.create_user(
+            username="staff_player", first_name="Pat", last_name="Player",
+        ).bandmember
+        BandMembership.objects.create(band=prsb, member=member)
+        BandMembership.objects.create(band=pan, member=member)
+        GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        horn = Instrument.objects.create(name="Staff Horn", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=horn, gig_quantity=1)
+
+        def add_song(title, mode, band, order):
+            song = Song.objects.create(title=title, duration=timedelta(minutes=3))
+            for gig_band in (prsb, pan):
+                BandSong.objects.create(band=gig_band, song=song, is_active=True, in_gig_rotation=True)
+            part = SongPart.objects.create(song=song, name="Lead")
+            PartAssignment.objects.create(
+                member=member, song_part=part, instrument=horn,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+            return GigSetlistEntry.objects.create(
+                gig=gig, song=song, staffing_mode=mode, staffing_band=band, _order=order,
+            )
+
+        add_song("Jammin'", "only", prsb, 0)
+        add_song("Sarah", "prefer", pan, 1)
+        add_song("Jump in da Line", "any", None, 2)
+        GigSetlistEntry.objects.create(gig=gig, break_duration=timedelta(minutes=5), _order=3)
+        extra = Song.objects.create(title="Extra Tune", duration=timedelta(minutes=2))
+        BandSong.objects.create(band=prsb, song=extra, is_active=True, in_gig_rotation=True)
+        extra_part = SongPart.objects.create(song=extra, name="Lead")
+        PartAssignment.objects.create(
+            member=member, song_part=extra_part, instrument=horn,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+
+        detail = self.client.get(reverse("band:gig_detail", kwargs={"slug": PRSB_SLUG, "pk": gig.pk}))
+        setlist_html = html.unescape(
+            detail.content.decode().split("<h2>Setlist</h2>", 1)[1].split("<h2>Instruments</h2>", 1)[0]
+        )
+        self.assertIn("Jammin' (Only PRSB) (3m 0s)", setlist_html)
+        self.assertIn("Sarah (Prefer Pan Ultimate) (3m 0s)", setlist_html)
+        self.assertIn("Jump in da Line (Any Band) (3m 0s)", setlist_html)
+        self.assertIn("Break (5m 0s)", setlist_html)
+        self.assertNotIn("Break (Only", setlist_html)
+        self.assertNotIn("Break (Prefer", setlist_html)
+        self.assertNotIn("Break (Any Band)", setlist_html)
+
+        assignments = self.client.get(reverse(
+            "band:gig_part_assignments_detail", kwargs={"slug": PRSB_SLUG, "pk": gig.pk},
+        ))
+        body = html.unescape(assignments.content.decode())
+        setlist_songs, recommendations = body.split("<h2>Song Recommendations</h2>", 1)
+        self.assertIn("Jammin' (Only PRSB)", setlist_songs)
+        self.assertIn("Sarah (Prefer Pan Ultimate)", setlist_songs)
+        self.assertIn("Jump in da Line (Any Band)", setlist_songs)
+        self.assertIn("Extra Tune", recommendations)
+        self.assertNotIn("(Only ", recommendations)
+        self.assertNotIn("(Prefer ", recommendations)
+        self.assertNotIn("(Any Band)", recommendations)
+
+        printed = self.client.get(
+            reverse("band:gig_part_assignment_print", kwargs={"slug": PRSB_SLUG, "pk": gig.pk}),
+            {"order": "setlist"},
+        )
+        headings = re.findall(r"<h2>(.*?)</h2>", html.unescape(printed.content.decode()))
+        self.assertEqual(headings, [
+            "Jammin' (Only PRSB)",
+            "Sarah (Prefer Pan Ultimate)",
+            "Jump in da Line (Any Band)",
+        ])
+

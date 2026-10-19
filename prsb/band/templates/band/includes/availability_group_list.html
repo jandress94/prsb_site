@@ -1,0 +1,10 @@
+{% for group in groups %}
+    <div class="band-availability-group">
+        {% if show_band_groups and group.label %}
+            <div class="band-name">{{ group.label }}</div>
+        {% endif %}
+        {% for person in group.members %}
+            {{ person }}<br/>
+        {% endfor %}
+    </div>
+{% endfor %}

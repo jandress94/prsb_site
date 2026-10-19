@@ -36,28 +36,16 @@
         <tbody>
             <tr>
                 <td>
-                    {% for attendance in available_members %}
-                        {{ attendance.member }}
-                        <br/>
-                    {% endfor %}
+                    {% include "band/includes/availability_group_list.html" with groups=available_groups %}
                 </td>
                 <td>
-                    {% for attendance in maybe_available_members %}
-                        {{ attendance.member }}
-                        <br/>
-                    {% endfor %}
+                    {% include "band/includes/availability_group_list.html" with groups=maybe_available_groups %}
                 </td>
                 <td>
-                    {% for attendance in unavailable_members %}
-                        {{ attendance.member }}
-                        <br/>
-                    {% endfor %}
+                    {% include "band/includes/availability_group_list.html" with groups=unavailable_groups %}
                 </td>
                 <td>
-                    {% for member in missing_members %}
-                        {{ member }}
-                        <br/>
-                    {% endfor %}
+                    {% include "band/includes/availability_group_list.html" with groups=missing_groups %}
                 </td>
             </tr>
         </tbody>
@@ -68,7 +56,7 @@
     <ol>
         {% for set_list_entry in setlist %}
             <li>{% if set_list_entry.song %}
-                    {{ set_list_entry.song }} ({{ set_list_entry.song.duration|duration_to_minutes_seconds }})
+                    {{ set_list_entry.song }}{{ set_list_entry.staffing_note }} ({{ set_list_entry.song.duration|duration_to_minutes_seconds }})
                 {% else %}
                     Break ({{ set_list_entry.break_duration|duration_to_minutes_seconds }})
                 {% endif %}

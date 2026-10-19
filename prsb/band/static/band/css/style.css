@@ -125,6 +125,19 @@ tr.error, ul.errorlist {
     opacity: 0.85;
 }
 
+.band-availability-group + .band-availability-group {
+    margin-top: 0.75em;
+}
+
+.band-availability-group .band-name {
+    font-weight: 700;
+}
+
+tr.band-group td {
+    background-color: #FFB627;
+    font-weight: 700;
+}
+
 /* Song recommendation groups */
 h3.recommendation-group {
     border-top: 3px solid #0D283C;

@@ -20,14 +20,21 @@
                 <th>Availability</th>
             </thead>
             <tbody>
-                {% for form in formset %}
-                    <tr>
-                        {{ form.attendance_id }}
-                        {{ form.member_id }}
-                        <td>{{ form.member_name }}</td>
-                        <td>{{ form.status }}</td>
-                    </tr>
-            {% endfor %}
+                {% for group in form_groups %}
+                    {% if show_band_groups and group.label %}
+                        <tr class="band-group">
+                            <td colspan="2">{{ group.label }}</td>
+                        </tr>
+                    {% endif %}
+                    {% for form in group.forms %}
+                        <tr>
+                            {{ form.attendance_id }}
+                            {{ form.member_id }}
+                            <td>{{ form.member_name }}</td>
+                            <td>{{ form.status }}</td>
+                        </tr>
+                    {% endfor %}
+                {% endfor %}
             </tbody>
         </table>
         <input type="submit" value="Update">
