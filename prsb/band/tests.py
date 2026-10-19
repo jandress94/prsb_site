@@ -396,8 +396,10 @@ class MemberDetailSoloColumnTestCase(TestCase):
             username="member_solo_user", first_name="Ben", last_name="Hills"
         )
         cls.song = Song.objects.create(title="Member Solo Song")
+        prsb = Band.objects.get(slug="prsb")
+        BandMembership.objects.create(band=prsb, member=cls.member.bandmember)
         BandSong.objects.create(
-            band=Band.objects.get(slug="prsb"),
+            band=prsb,
             song=cls.song,
             in_gig_rotation=True,
         )
@@ -2296,6 +2298,156 @@ class BandPageScopeTestCase(TestCase):
         for url_name, data in cases:
             response = self.client.post(reverse(url_name, kwargs={"slug": inactive.slug}), data)
             self.assertEqual(response.status_code, 403, msg=url_name)
+
+
+class PartAssignmentBandScopeTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prsb = Band.objects.get(slug="prsb")
+        cls.other = Band.objects.create(name="Scope Other", slug="scope-other")
+        cls.third = Band.objects.create(name="Scope Third", slug="scope-third")
+        cls.player = User.objects.create_user(
+            username="scope_player", first_name="Scope", last_name="Player",
+        )
+        cls.shared = User.objects.create_user(
+            username="scope_shared", first_name="Shared", last_name="Player",
+        )
+        cls.outsider = User.objects.create_user(
+            username="scope_outsider", first_name="Outside", last_name="Player",
+        )
+        cls.inactive_user = User.objects.create_user(
+            username="scope_inactive_user", first_name="Inactive", last_name="Player", is_active=False,
+        )
+        BandMembership.objects.create(band=cls.prsb, member=cls.player.bandmember)
+        BandMembership.objects.create(band=cls.other, member=cls.player.bandmember, is_active=False)
+        BandMembership.objects.create(band=cls.prsb, member=cls.shared.bandmember)
+        BandMembership.objects.create(band=cls.third, member=cls.shared.bandmember)
+        BandMembership.objects.create(band=cls.other, member=cls.outsider.bandmember)
+        BandMembership.objects.create(band=cls.prsb, member=cls.inactive_user.bandmember)
+        cls.home_song = Song.objects.create(title="Home Song")
+        cls.dropped_song = Song.objects.create(title="Dropped Song")
+        cls.other_song = Song.objects.create(title="Other Band Song")
+        cls.third_song = Song.objects.create(title="Third Band Song")
+        cls.third_only_song = Song.objects.create(title="Third Only Song")
+        cls.unlinked_song = Song.objects.create(title="Unlinked Song")
+        BandSong.objects.create(band=cls.prsb, song=cls.home_song, is_active=True)
+        BandSong.objects.create(band=cls.prsb, song=cls.dropped_song, is_active=False)
+        BandSong.objects.create(band=cls.other, song=cls.other_song, is_active=True)
+        BandSong.objects.create(band=cls.third, song=cls.third_song, is_active=True)
+        BandSong.objects.create(band=cls.prsb, song=cls.third_song, is_active=True)
+        BandSong.objects.create(band=cls.third, song=cls.third_only_song, is_active=True)
+        cls.home_part = SongPart.objects.create(song=cls.home_song, name="Lead")
+        cls.dropped_part = SongPart.objects.create(song=cls.dropped_song, name="Lead")
+        cls.other_part = SongPart.objects.create(song=cls.other_song, name="Lead")
+        cls.third_part = SongPart.objects.create(song=cls.third_song, name="Lead")
+        cls.third_only_part = SongPart.objects.create(song=cls.third_only_song, name="Lead")
+        cls.unlinked_part = SongPart.objects.create(song=cls.unlinked_song, name="Lead")
+        cls.horn = Instrument.objects.create(name="Scope Horn", order=0)
+        for part in (cls.home_part, cls.dropped_part, cls.other_part):
+            PartAssignment.objects.create(
+                member=cls.player.bandmember, song_part=part, instrument=cls.horn,
+            )
+        PartAssignment.objects.create(
+            member=cls.shared.bandmember, song_part=cls.third_part, instrument=cls.horn,
+        )
+        PartAssignment.objects.create(
+            member=cls.shared.bandmember, song_part=cls.third_only_part, instrument=cls.horn,
+        )
+
+    def test_member_detail_shows_songs_from_active_bands_only(self):
+        response = self.client.get(
+            reverse("band:member_detail", kwargs={"slug": "prsb", "pk": self.player.bandmember.pk}),
+        )
+        titles = [row.song_part.song.title for row in response.context["part_assignments"]]
+        missing = [song.title for song in response.context["missing_songs"]]
+        self.assertEqual(titles, ["Home Song"])
+        self.assertIn("Third Band Song", missing)
+        self.assertNotIn("Third Only Song", missing)
+        self.assertNotIn("Dropped Song", missing)
+        self.assertNotIn("Other Band Song", missing)
+        self.assertNotIn("Unlinked Song", missing)
+        self.assertNotContains(response, "Dropped Song")
+        self.assertNotContains(response, "Other Band Song")
+
+    def test_member_detail_includes_every_band_the_member_is_in(self):
+        response = self.client.get(
+            reverse("band:member_detail", kwargs={"slug": "prsb", "pk": self.shared.bandmember.pk}),
+        )
+        titles = [row.song_part.song.title for row in response.context["part_assignments"]]
+        missing = {song.title for song in response.context["missing_songs"]}
+        self.assertEqual(titles, ["Third Band Song", "Third Only Song"])
+        self.assertIn("Home Song", missing)
+        self.assertNotIn("Other Band Song", missing)
+
+    def test_member_create_form_limits_song_parts_to_member_bands(self):
+        response = self.client.get(reverse(
+            "band:member_part_assignment_create",
+            kwargs={"slug": "prsb", "member_id": self.player.bandmember.pk},
+        ))
+        part_ids = set(response.context["form"].fields["song_part"].queryset.values_list("pk", flat=True))
+        self.assertIn(self.home_part.pk, part_ids)
+        self.assertIn(self.third_part.pk, part_ids)
+        self.assertNotIn(self.third_only_part.pk, part_ids)
+        self.assertNotIn(self.other_part.pk, part_ids)
+        self.assertNotIn(self.dropped_part.pk, part_ids)
+        self.assertNotIn(self.unlinked_part.pk, part_ids)
+
+        shared_form = self.client.get(reverse(
+            "band:member_part_assignment_create",
+            kwargs={"slug": "prsb", "member_id": self.shared.bandmember.pk},
+        ))
+        shared_part_ids = set(
+            shared_form.context["form"].fields["song_part"].queryset.values_list("pk", flat=True)
+        )
+        self.assertIn(self.third_only_part.pk, shared_part_ids)
+        self.assertNotIn(self.other_part.pk, shared_part_ids)
+
+        rejected = self.client.post(reverse(
+            "band:member_part_assignment_create",
+            kwargs={"slug": "prsb", "member_id": self.player.bandmember.pk},
+        ), {
+            "member": self.player.bandmember.pk,
+            "song_part": self.other_part.pk,
+            "instrument": self.horn.pk,
+            "performance_readiness": PerformanceReadiness.READY,
+        })
+        self.assertEqual(rejected.status_code, 200)
+        self.assertIn("song_part", rejected.context["form"].errors)
+        self.assertEqual(PartAssignment.objects.filter(
+            member=self.player.bandmember, song_part=self.other_part,
+        ).count(), 1)
+
+    def test_song_create_form_limits_members_to_song_bands(self):
+        response = self.client.get(reverse(
+            "band:song_part_assignment_create",
+            kwargs={"slug": "prsb", "song_id": self.third_song.pk},
+        ))
+        member_ids = set(response.context["form"].fields["member"].queryset.values_list("pk", flat=True))
+        self.assertIn(self.player.bandmember.pk, member_ids)
+        self.assertIn(self.shared.bandmember.pk, member_ids)
+        self.assertNotIn(self.outsider.bandmember.pk, member_ids)
+        self.assertNotIn(self.inactive_user.bandmember.pk, member_ids)
+
+        only_third = self.client.get(reverse(
+            "band:song_part_assignment_create",
+            kwargs={"slug": "prsb", "song_id": self.third_only_song.pk},
+        ))
+        only_third_ids = set(only_third.context["form"].fields["member"].queryset.values_list("pk", flat=True))
+        self.assertEqual(only_third_ids, {self.shared.bandmember.pk})
+
+        rejected = self.client.post(reverse(
+            "band:song_part_assignment_create",
+            kwargs={"slug": "prsb", "song_id": self.third_song.pk},
+        ), {
+            "member": self.outsider.bandmember.pk,
+            "song_part": self.third_part.pk,
+            "instrument": self.horn.pk,
+            "performance_readiness": PerformanceReadiness.READY,
+        })
+        self.assertEqual(rejected.status_code, 200)
+        self.assertFalse(PartAssignment.objects.filter(
+            member=self.outsider.bandmember, song_part=self.third_part,
+        ).exists())
 
 
 class GigStaffingValidationTestCase(TestCase):

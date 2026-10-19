@@ -97,8 +97,26 @@ class MemberListView(BandScopedMixin, generic.ListView):
         return context
 
 
+def songs_linked_to_member_bands(member):
+    return Song.objects.filter(
+        band_songs__is_active=True,
+        band_songs__band__bandmembership__member=member,
+        band_songs__band__bandmembership__is_active=True,
+    ).distinct()
+
+
+def members_in_song_bands(song):
+    return BandMember.objects.filter(
+        user__is_active=True,
+        bandmembership__is_active=True,
+        bandmembership__band__bandsong__song=song,
+        bandmembership__band__bandsong__is_active=True,
+    ).distinct()
+
+
 def get_missing_songs_for_member(member: BandMember):
-    return Song.objects.filter(~Exists(PartAssignment.objects.filter(member=member, song_part__song=OuterRef("pk"))))
+    assigned = PartAssignment.objects.filter(member=member, song_part__song=OuterRef("pk"))
+    return songs_linked_to_member_bands(member).filter(~Exists(assigned))
 
 
 class MemberDetailView(BandScopedMixin, generic.DetailView):
@@ -110,7 +128,8 @@ class MemberDetailView(BandScopedMixin, generic.DetailView):
         current_member = context['bandmember']
 
         context["part_assignments"] = PartAssignment.objects.filter(
-            member=current_member
+            member=current_member,
+            song_part__song__in=songs_linked_to_member_bands(current_member),
         ).order_by('song_part__song__title', 'song_part___order', 'instrument__name')
 
         context["missing_songs"] = get_missing_songs_for_member(current_member)
@@ -339,20 +358,28 @@ class PartAssignmentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if member_id is not None:
-            self.fields['member'].initial = BandMember.objects.get(pk=member_id)
+            member = BandMember.objects.get(pk=member_id)
+            self.fields['member'].initial = member
             self.fields['member'].queryset = BandMember.objects.filter(pk=member_id)
             self.fields['member'].disabled = True
 
             self.member_id = member_id
-            self.member_name = self.fields['member'].initial.user.get_full_name()
+            self.member_name = member.user.get_full_name()
         else:
+            member = None
             self.fields['member'].queryset = BandMember.objects.filter(user__is_active=True)
 
         if song_id is not None:
+            song = Song.objects.get(pk=song_id)
             self.fields['song_part'].queryset = SongPart.objects.filter(song_id=song_id).order_by('song', '_order')
-
             self.song_id = song_id
-            self.song_name = Song.objects.get(pk=song_id).title
+            self.song_name = song.title
+            if member is None:
+                self.fields['member'].queryset = members_in_song_bands(song)
+        elif member is not None:
+            self.fields['song_part'].queryset = SongPart.objects.filter(
+                song__in=songs_linked_to_member_bands(member),
+            ).order_by('song', '_order')
         else:
             self.fields['song_part'].queryset = SongPart.objects.order_by('song', '_order')
 
