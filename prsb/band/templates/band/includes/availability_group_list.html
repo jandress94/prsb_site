@@ -1,7 +1,7 @@
 {% for group in groups %}
     <div class="band-availability-group">
         {% if show_band_groups and group.label %}
-            <div class="band-name">{{ group.label }}</div>
+            <div class="band-name">{{ group.label }} ({{ group.members|length }})</div>
         {% endif %}
         {% for person in group.members %}
             {{ person }}<br/>

@@ -3604,11 +3604,11 @@ class GigAvailabilityBandGroupingTestCase(TestCase):
         self.assertEqual(len(response.context["available_members"]), 3)
 
         availability = self._availability_html(response)
-        self.assertLess(availability.index(">Alpha Band<"), availability.index("Zoe Alpha"))
-        self.assertLess(availability.index("Zoe Alpha"), availability.index(">Alpha Band, Zulu Band<"))
-        self.assertLess(availability.index(">Alpha Band, Zulu Band<"), availability.index("Mia Both"))
-        self.assertLess(availability.index("Mia Both"), availability.index(">Zulu Band<"))
-        self.assertLess(availability.index(">Zulu Band<"), availability.index("Amy Zulu"))
+        self.assertLess(availability.index(">Alpha Band (1)<"), availability.index("Zoe Alpha"))
+        self.assertLess(availability.index("Zoe Alpha"), availability.index(">Alpha Band, Zulu Band (1)<"))
+        self.assertLess(availability.index(">Alpha Band, Zulu Band (1)<"), availability.index("Mia Both"))
+        self.assertLess(availability.index("Mia Both"), availability.index(">Zulu Band (1)<"))
+        self.assertLess(availability.index(">Zulu Band (1)<"), availability.index("Amy Zulu"))
         self.assertEqual(availability.count("Mia Both"), 1)
 
     def test_edit_form_groups_by_band_without_duplicating_a_shared_member(self):
