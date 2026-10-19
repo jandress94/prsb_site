@@ -301,20 +301,27 @@ def get_gig_song_part_assignments(part_list: list[SongPart], all_assignments: li
             c_soloist[i] = -soloist_reward
     # Override variables (indices num_assignments .. num_assignments+num_overrides-1) stay 0.
 
-    # Several solo rewards can stack on one lineup. One non-preferred assignment has
-    # to cost more than all of them plus the full instrument reward. A hole still
-    # costs more than marking every candidate non-preferred. Keep this penalty off
-    # c_instrument so instrument_fit is scored from the instrument coefficients alone.
-    non_preferred_penalty = max_concurrent_players * soloist_reward + max_instrument_reward + 1
+    # Reward preferred players by more than one solo plus full instrument fit so they
+    # win a contested seat. Other-band players keep their instrument reward, so an open
+    # seat is still filled. A hole stays costlier than every preferred reward.
+    # A fraction of instrument reward, under the solo margin, keeps a preferred player
+    # on the scarcer seat when the other band can fill the open common seat.
+    preferred_assignment_reward = soloist_reward + max_instrument_reward + 1
+    preferred_instrument_weight = (
+        ScoringConfig.SOLOIST_REWARD_OVER_MAX_INSTRUMENT / 2 / max_instrument_reward
+    )
     c_preference = np.zeros(num_vars)
     if preferred_member_ids is not None:
         missing_part_penalty = max(
             missing_part_penalty,
-            num_assignments * non_preferred_penalty + 1,
+            num_assignments * preferred_assignment_reward + 1,
         )
         for index, assignment in enumerate(all_assignments):
-            if assignment.member_id not in preferred_member_ids:
-                c_preference[index] = non_preferred_penalty
+            if assignment.member_id in preferred_member_ids:
+                c_preference[index] = (
+                    -preferred_assignment_reward
+                    + c_instrument[index] * preferred_instrument_weight
+                )
 
     c_missing_part_penalty = np.zeros(num_vars)
     c_missing_part_penalty[num_assignments + num_overrides:] = missing_part_penalty
