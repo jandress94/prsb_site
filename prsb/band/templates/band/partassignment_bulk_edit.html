@@ -1,0 +1,79 @@
+{% extends "band/base.html" %}
+{% load static %}
+
+{% block title %}Bulk Edit Part Assignments | PRSB{% endblock %}
+
+{% block nav %}
+    > <a href={% url 'band:song_list' band.slug %}>Songs</a>
+    > <a href={% url 'band:song_detail' band.slug song.pk %}>{{ song.title }}</a>
+    > Bulk Edit Part Assignments
+{% endblock %}
+
+{% block content %}
+    <h1>Bulk Edit Part Assignments</h1>
+    <p>{{ song.title }}</p>
+
+    {% if errors %}
+        <ul class="errorlist">
+            {% for error in errors %}
+                <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form method="post" id="bulk-edit-form">{% csrf_token %}
+        <input type="hidden" data-server-fields name="existing-TOTAL" value="{{ existing_total }}">
+        <input type="hidden" data-server-fields name="new-TOTAL" value="{{ new_total }}">
+
+        {% for section in sections %}
+            <section class="bulk-part" data-part-id="{{ section.part.pk }}">
+                <h2>{{ section.part.name }}</h2>
+                {% for row in section.existing_rows %}
+                    <div class="bulk-row" data-kind="existing" data-instrument-id="{{ row.instrument_id }}">
+                        <span class="bulk-instrument">{{ row.instrument_name }}</span>
+                        <div class="member-picker" data-selected="{{ row.selected_ids }}">
+                            {% for chip in row.chips %}
+                                <span class="member-chip">{{ chip.name }}</span>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" data-server-fields name="existing-{{ row.index }}-part" value="{{ section.part.pk }}">
+                        <input type="hidden" data-server-fields name="existing-{{ row.index }}-instrument" value="{{ row.instrument_id }}">
+                        {% for chip in row.chips %}
+                            <input type="hidden" data-server-fields name="existing-{{ row.index }}-members" value="{{ chip.id }}">
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+                <div class="bulk-new-rows">
+                    {% for row in section.new_rows %}
+                        <div class="bulk-row" data-kind="new">
+                            <select class="bulk-instrument-select">
+                                <option value="">---------</option>
+                                {% for instrument in picker_instruments %}
+                                    <option value="{{ instrument.id }}" {% if instrument.id == row.instrument_id %}selected{% endif %}>{{ instrument.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="member-picker" data-selected="{{ row.selected_ids }}">
+                                {% for chip in row.chips %}
+                                    <span class="member-chip">{{ chip.name }}</span>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="bulk-remove-row">Remove row</button>
+                            <input type="hidden" data-server-fields name="new-{{ row.index }}-part" value="{{ section.part.pk }}">
+                            <input type="hidden" data-server-fields name="new-{{ row.index }}-instrument" value="{{ row.instrument_id|default_if_none:'' }}">
+                            {% for chip in row.chips %}
+                                <input type="hidden" data-server-fields name="new-{{ row.index }}-members" value="{{ chip.id }}">
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="bulk-add-row">Add row</button>
+            </section>
+        {% endfor %}
+
+        <input type="submit" value="Save">
+        <a href={% url 'band:song_detail' band.slug song.pk %}>Cancel</a>
+    </form>
+    {{ picker_members|json_script:"bulk-members" }}
+    {{ picker_instruments|json_script:"bulk-instruments" }}
+    <script src="{% static 'band/js/part_assignment_bulk_edit.js' %}"></script>
+{% endblock %}
