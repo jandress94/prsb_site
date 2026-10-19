@@ -39,8 +39,10 @@
     <div>
         <h2>Part Assignments</h2>
 
-        <a href={% url 'band:song_part_assignment_create' band.slug song.pk %}>New Part Assignment</a>
-        <a href={% url 'band:song_part_assignment_bulk_edit' band.slug song.pk %}>Bulk Edit Part Assignments</a>
+        <div class="part-assignment-actions">
+            <a class="action-link" href={% url 'band:song_part_assignment_create' band.slug song.pk %}>Add One Assignment</a>
+            <a class="action-link" href={% url 'band:song_part_assignment_bulk_edit' band.slug song.pk %}>Bulk Edit Assignments</a>
+        </div>
 
         <table class="sortable">
             <thead>

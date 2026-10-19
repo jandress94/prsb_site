@@ -3248,7 +3248,8 @@ class BulkEditPartAssignmentViewTestCase(TestCase):
 
     def test_song_detail_links_to_bulk_edit(self):
         detail = self.client.get(reverse("band:song_detail", kwargs={"slug": "prsb", "pk": self.song.pk}))
-        self.assertContains(detail, "Bulk Edit Part Assignments")
+        self.assertContains(detail, "Add One Assignment")
+        self.assertContains(detail, "Bulk Edit Assignments")
         self.assertContains(detail, self.url)
 
     def test_get_renders_every_part_and_existing_assignment(self):

@@ -161,6 +161,29 @@ button:hover, input[type="submit"]:hover {
     background-color: #FFB627; /* Yellow hover effect */
 }
 
+.part-assignment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.action-link {
+    display: inline-block;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #805537;
+    border-radius: 5px;
+    background-color: #F8701B;
+    color: #0D283C;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.action-link:hover {
+    background-color: #FFB627;
+    text-decoration: none;
+}
+
 /* Media Queries for fine-tuning smaller screens */
 @media (max-width: 768px) {
     body::before {
@@ -192,14 +215,20 @@ button:hover, input[type="submit"]:hover {
 
 .bulk-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     align-items: flex-start;
     margin: 8px 0;
 }
 
+.bulk-row > select,
+.bulk-row > button {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+}
+
 .bulk-instrument {
-    min-width: 8rem;
+    flex: 0 0 8rem;
     padding-top: 6px;
 }
 
@@ -207,11 +236,23 @@ button:hover, input[type="submit"]:hover {
     position: relative;
     display: flex;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
     gap: 4px;
     align-items: center;
-    min-width: 16rem;
     border: 1px solid #0D283C;
     padding: 4px;
+}
+
+.member-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.member-picker input {
+    flex: 1 1 6rem;
+    min-width: 4rem;
 }
 
 .member-chip {
