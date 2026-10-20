@@ -73,7 +73,7 @@ class GigBandObjectMixin:
 
 
 class BandHomeView(BandScopedMixin, generic.TemplateView):
-    template_name = "band/index.html"
+    template_name = "band/band_home.html"
 
 
 class MemberListView(BandScopedMixin, generic.ListView):
