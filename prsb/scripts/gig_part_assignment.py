@@ -13,7 +13,7 @@ django.setup()
 from band.models import Song, SongPart, PartAssignment, Gig, GigAttendance, GigInstrument, BandMember, \
     PerformanceReadiness, GigPartAssignmentOverride, GigSetlistEntry, OverrideType, Instrument, \
     DrumKitCoverPlayer, BandMembership, BandSong
-from band.validation import entry_pool_member_ids
+from band.validation import entry_pool_member_ids, song_rotation_member_ids
 
 
 RAND_SEED = 0
@@ -479,6 +479,11 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
     rec_pool = set(
         BandMembership.objects.filter(band__in=gig_bands).values_list("member_id", flat=True)
     ) & set(available_by_id)
+    rotation_members = (
+        song_rotation_member_ids(rec_song_ids, {band.pk for band in gig_bands})
+        if len(gig_bands) >= 2
+        else {}
+    )
     rec_songs = {
         song.pk: song
         for song in Song.objects.filter(pk__in=rec_song_ids).prefetch_related("parts")
@@ -494,11 +499,12 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
         rows.sort(key=lambda row: row.pk)
         work.append((entry, entry.song, rows, pool_members(pool)))
     for song_id, song in rec_songs.items():
-        rows = [row for row in part_rows_by_song.get(song_id, []) if row.member_id in rec_pool]
+        allowed = rec_pool & rotation_members[song_id] if song_id in rotation_members else rec_pool
+        rows = [row for row in part_rows_by_song.get(song_id, []) if row.member_id in allowed]
         rows.sort(key=lambda row: row.pk)
         if not rows and song_id not in kit_repertoire_by_song and song_id not in overrides_by_song:
             continue
-        work.append((None, song, rows, pool_members(rec_pool)))
+        work.append((None, song, rows, pool_members(allowed)))
 
     work.sort(key=lambda item: (
         pool_rank(item[0]),
@@ -541,7 +547,7 @@ def get_gig_part_assignments(gig: Gig, part_assignment_overrides: list[GigPartAs
             song=song,
             part_assignments=part_assignments,
             score=score,
-            attendees=attendees,
+            attendees=[member for member in attendees if member in available_members],
             gig_instruments=gig_instruments,
             setlist_entry=entry,
         )

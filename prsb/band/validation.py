@@ -44,16 +44,55 @@ def validate_entry_change(entry, previous, gig_bands):
     band = entry.staffing_band
     if not band.is_active:
         raise ValidationError("New staffing must name an active band.")
-    if not BandSong.objects.filter(song_id=entry.song_id, band=band, is_active=True).exists():
+    link = BandSong.objects.filter(song_id=entry.song_id, band=band, is_active=True).first()
+    if link is None:
         raise ValidationError("The song must be active in the named band.")
+    if not link.in_gig_rotation:
+        raise ValidationError("Only and Prefer must name a band that has this song in its gig rotation.")
+
+
+def song_rotation_member_ids(song_ids, band_ids):
+    """Members of gig bands that rotate each song. Songs nobody rotates are omitted."""
+    if not song_ids or not band_ids:
+        return {}
+    song_bands = {}
+    rotating_band_ids = set()
+    for song_id, band_id in BandSong.objects.filter(
+        song_id__in=song_ids,
+        band_id__in=band_ids,
+        is_active=True,
+        in_gig_rotation=True,
+    ).values_list("song_id", "band_id"):
+        song_bands.setdefault(song_id, set()).add(band_id)
+        rotating_band_ids.add(band_id)
+    members_by_band = {}
+    if rotating_band_ids:
+        for band_id, member_id in BandMembership.objects.filter(
+            band_id__in=rotating_band_ids,
+        ).values_list("band_id", "member_id"):
+            members_by_band.setdefault(band_id, set()).add(member_id)
+    result = {}
+    for song_id, bands in song_bands.items():
+        members = set()
+        for band_id in bands:
+            members.update(members_by_band.get(band_id, ()))
+        result[song_id] = members
+    return result
 
 
 def entry_pool_member_ids(entry):
     gig_band_ids = set(entry.gig.bands.values_list("pk", flat=True))
-    if entry.gig.bands.count() < 2 or entry.staffing_mode in {"", "only"}:
+    if len(gig_band_ids) < 2 or entry.staffing_mode in {"", "only"}:
         band_ids = {entry.staffing_band_id} if entry.staffing_band_id else gig_band_ids
-    elif entry.staffing_mode == "prefer":
-        band_ids = gig_band_ids
     else:
-        band_ids = gig_band_ids
-    return set(BandMembership.objects.filter(band_id__in=band_ids).values_list("member_id", flat=True))
+        band_ids = set(gig_band_ids)
+    member_ids = set(
+        BandMembership.objects.filter(band_id__in=band_ids).values_list("member_id", flat=True)
+    )
+    if len(gig_band_ids) < 2:
+        return member_ids
+    # A band that has not rotated the song has not learned its parts.
+    know_it = song_rotation_member_ids([entry.song_id], gig_band_ids).get(entry.song_id)
+    if know_it is None:
+        return member_ids
+    return member_ids & know_it

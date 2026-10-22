@@ -2508,6 +2508,28 @@ class GigStaffingValidationTestCase(TestCase):
         with self.assertRaises(ValidationError):
             validate_entry_change(entry, previous=None, gig_bands=set(gig.bands.all()))
 
+    def test_only_and_prefer_require_song_in_band_rotation(self):
+        gig = self.make_two_band_gig()
+        first, second = list(gig.bands.order_by("name"))
+        song = Song.objects.create(title="Linked Off Rotation")
+        BandSong.objects.create(band=first, song=song, is_active=True, in_gig_rotation=False)
+        BandSong.objects.create(band=second, song=song, is_active=True, in_gig_rotation=True)
+        gig_bands = set(gig.bands.all())
+        for mode in ("only", "prefer"):
+            entry = GigSetlistEntry(gig=gig, song=song, staffing_mode=mode, staffing_band=first)
+            with self.assertRaisesMessage(ValidationError, "gig rotation"):
+                validate_entry_change(entry, previous=None, gig_bands=gig_bands)
+        validate_entry_change(
+            GigSetlistEntry(gig=gig, song=song, staffing_mode="any"),
+            previous=None,
+            gig_bands=gig_bands,
+        )
+        validate_entry_change(
+            GigSetlistEntry(gig=gig, song=song, staffing_mode="only", staffing_band=second),
+            previous=None,
+            gig_bands=gig_bands,
+        )
+
     def _gig_update_post_data(self, gig, band_ids):
         return {
             "name": gig.name,
@@ -2598,6 +2620,27 @@ class GigStaffingValidationTestCase(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("member", form.errors)
+
+    def test_setlist_save_rejects_only_when_song_is_out_of_rotation(self):
+        gig = self.make_two_band_gig()
+        first = gig.bands.order_by("name").first()
+        song = Song.objects.create(title="Off Rotation Staffing")
+        BandSong.objects.create(band=first, song=song, is_active=True, in_gig_rotation=False)
+        url = reverse("band:gig_setlist_update", kwargs={"slug": first.slug, "gig_id": gig.pk})
+        response = self.client.post(url, {
+            "form-TOTAL_FORMS": "1",
+            "form-INITIAL_FORMS": "0",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-id": "",
+            "form-0-song": str(song.pk),
+            "form-0-break_duration": "",
+            "form-0-staffing_mode": "only",
+            "form-0-staffing_band": str(first.pk),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "gig rotation")
+        self.assertEqual(gig.gigsetlistentry_set.count(), 0)
 
     def test_setlist_save_keeps_entry_whose_song_link_is_inactive(self):
         gig = self.make_two_band_gig()
@@ -2690,6 +2733,29 @@ class MultiBandSolverTestCase(TestCase):
         gig.bands.set(bands)
         return gig
 
+    def _shared_song(self, in_rotation_for_b):
+        n = self._next_id()
+        band_a = Band.objects.create(name=f"Rotation A {n}", slug=f"rotation-a-{n}")
+        band_b = Band.objects.create(name=f"Rotation B {n}", slug=f"rotation-b-{n}")
+        gig = self._gig(n, [band_a, band_b])
+        instrument = Instrument.objects.create(name=f"Rotation Horn {n}", quantity=1, order=0)
+        GigInstrument.objects.create(gig=gig, instrument=instrument, gig_quantity=1)
+        song = Song.objects.create(title=f"Rotation Song {n}")
+        BandSong.objects.create(band=band_a, song=song, is_active=True, in_gig_rotation=True)
+        BandSong.objects.create(band=band_b, song=song, is_active=True, in_gig_rotation=in_rotation_for_b)
+        SongPart.objects.create(song=song, name="Lead")
+        player_a = User.objects.create_user(
+            username=f"rotation_a_{n}", first_name="Rot", last_name=f"A{n}",
+        ).bandmember
+        player_b = User.objects.create_user(
+            username=f"rotation_b_{n}", first_name="Rot", last_name=f"B{n}",
+        ).bandmember
+        BandMembership.objects.create(band=band_a, member=player_a)
+        BandMembership.objects.create(band=band_b, member=player_b)
+        for member in (player_a, player_b):
+            GigAttendance.objects.create(gig=gig, member=member, status=GigAttendance.AVAILABLE)
+        return gig, song, instrument, band_a, band_b, player_a, player_b
+
     def scenario(self, mode="only", preferred_knows_part=True):
         n = self._next_id()
         preferred_band = Band.objects.create(name=f"Solver Preferred {n}", slug=f"solver-preferred-{n}")
@@ -2759,6 +2825,67 @@ class MultiBandSolverTestCase(TestCase):
         gig, entry, preferred, other = self.scenario(mode="any", preferred_knows_part=False)
         setlist, _, _ = get_gig_part_assignments(gig, [])
         self.assertEqual(setlist[0].part_assignments[0].member, other)
+
+    def test_any_skips_members_only_in_a_band_without_rotation(self):
+        gig, song, instrument, band_a, band_b, player_a, player_b = self._shared_song(in_rotation_for_b=False)
+        part = song.parts.get()
+        for member in (player_a, player_b):
+            PartAssignment.objects.create(
+                member=member, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+        GigSetlistEntry.objects.create(gig=gig, song=song, staffing_mode="any")
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual([row.member for row in setlist[0].part_assignments], [player_a])
+        self.assertNotIn(player_b, setlist[0].non_players)
+
+    def test_member_of_the_rotation_band_stays_eligible_on_any(self):
+        gig, song, instrument, band_a, band_b, player_a, player_b = self._shared_song(in_rotation_for_b=False)
+        dual = User.objects.create_user(
+            username=f"solver_dual_{song.pk}", first_name="Dual", last_name="Player",
+        ).bandmember
+        BandMembership.objects.create(band=band_a, member=dual)
+        BandMembership.objects.create(band=band_b, member=dual)
+        GigAttendance.objects.create(gig=gig, member=dual, status=GigAttendance.AVAILABLE)
+        part = song.parts.get()
+        for member in (dual, player_b):
+            PartAssignment.objects.create(
+                member=member, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+        GigSetlistEntry.objects.create(gig=gig, song=song, staffing_mode="any")
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual([row.member for row in setlist[0].part_assignments], [dual])
+
+    def test_prefer_does_not_fill_from_a_band_outside_rotation(self):
+        gig, song, instrument, band_a, band_b, player_a, player_b = self._shared_song(in_rotation_for_b=False)
+        PartAssignment.objects.create(
+            member=player_b, song_part=song.parts.get(), instrument=instrument,
+            performance_readiness=PerformanceReadiness.READY,
+        )
+        GigSetlistEntry.objects.create(
+            gig=gig, song=song, staffing_mode="prefer", staffing_band=band_a,
+        )
+
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(setlist[0].part_assignments, [])
+        self.assertEqual(len(setlist[0].unplayed_parts), 1)
+
+    def test_recommendation_skips_members_only_in_a_band_without_rotation(self):
+        gig, song, instrument, band_a, band_b, player_a, player_b = self._shared_song(in_rotation_for_b=False)
+        part = song.parts.get()
+        for member in (player_a, player_b):
+            PartAssignment.objects.create(
+                member=member, song_part=part, instrument=instrument,
+                performance_readiness=PerformanceReadiness.READY,
+            )
+
+        _, recs, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual([row.song for row in recs], [song])
+        self.assertEqual([row.member for row in recs[0].part_assignments], [player_a])
+        self.assertNotIn(player_b, recs[0].non_players)
 
     def test_only_entries_are_solved_before_prefer(self):
         # Equal candidate counts and a Prefer title that sorts first. A title
@@ -2907,7 +3034,7 @@ class MultiBandSolverTestCase(TestCase):
         self.assertEqual(by_title["Setlist Out"].part_assignments[0].member, player_a)
         self.assertEqual({row.song for row in recs}, {rec_a, rec_b})
 
-    def _drum_cover_gig(self, mode):
+    def _drum_cover_gig(self, mode, other_band_in_rotation=False):
         n = self._next_id()
         band_a = Band.objects.create(name=f"Kit A {n}", slug=f"kit-a-{n}")
         band_b = Band.objects.create(name=f"Kit B {n}", slug=f"kit-b-{n}")
@@ -2918,6 +3045,8 @@ class MultiBandSolverTestCase(TestCase):
         GigInstrument.objects.create(gig=gig, instrument=kit, gig_quantity=1)
         song = Song.objects.create(title=f"Kit Song {n}")
         BandSong.objects.create(band=band_a, song=song, is_active=True, in_gig_rotation=True)
+        if other_band_in_rotation:
+            BandSong.objects.create(band=band_b, song=song, is_active=True, in_gig_rotation=True)
         engine = SongPart.objects.create(song=song, name="Engine")
 
         listed_user = User.objects.create_user(username=f"kit_listed_{n}", first_name="Listed", last_name=f"L{n}")
@@ -2946,11 +3075,18 @@ class MultiBandSolverTestCase(TestCase):
         self.assertEqual(setlist[0].unplayed_parts, [engine])
 
     def test_prefer_uses_another_bands_drum_cover(self):
-        gig, entry, cover, engine = self._drum_cover_gig("prefer")
+        gig, entry, cover, engine = self._drum_cover_gig("prefer", other_band_in_rotation=True)
         setlist, _, _ = get_gig_part_assignments(gig, [])
         self.assertEqual(len(setlist), 1)
         self.assertEqual(setlist[0].part_assignments[0].member, cover)
         self.assertTrue(setlist[0].part_assignments[0].is_drum_kit_cover)
+
+    def test_prefer_ignores_drum_cover_outside_rotation(self):
+        gig, entry, cover, engine = self._drum_cover_gig("prefer")
+        setlist, _, _ = get_gig_part_assignments(gig, [])
+        self.assertEqual(len(setlist), 1)
+        self.assertNotIn(cover, {row.member for row in setlist[0].part_assignments})
+        self.assertEqual(setlist[0].unplayed_parts, [engine])
 
     def test_prefer_fills_open_seat_and_keeps_preferred_players(self):
         n = self._next_id()
